@@ -49,7 +49,9 @@ code { font: .87em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   background: var(--shade); padding: .1em .35em; border-radius: 3px; }
 hr { border:0; border-top:1px solid var(--rule); margin:2.2rem 0; }
 blockquote { margin:.9rem 0; padding:.1rem 0 .1rem 1rem;
-  border-left:3px solid var(--rule); color:var(--muted); }
+  border-left:3px solid var(--rule); color:var(--muted);
+  break-inside: avoid; page-break-inside: avoid; }
+blockquote p:last-child { margin-bottom:0; }
 ul { margin:.2rem 0 1rem; padding-left:1.35rem; }
 li { margin:.3rem 0; }
 
@@ -231,8 +233,23 @@ def md_to_html(md: str) -> str:
         if line.lstrip().startswith(">"):
             flush_para()
             flush_list()
-            body = line.lstrip()[1:].strip()
-            out.append(f"<blockquote>{inline(body)}</blockquote>")
+            # Consume the whole block so a wrapped quote is one <blockquote>,
+            # not one per line. A blank ">" starts a new paragraph within it.
+            quoted = [line.lstrip()[1:].strip()]
+            while i < len(lines) and lines[i].lstrip().startswith(">"):
+                quoted.append(lines[i].lstrip()[1:].strip())
+                i += 1
+            paras, buf = [], []
+            for q in quoted:
+                if q:
+                    buf.append(q)
+                elif buf:
+                    paras.append(" ".join(buf))
+                    buf = []
+            if buf:
+                paras.append(" ".join(buf))
+            inner = "".join(f"<p>{inline(p)}</p>" for p in paras)
+            out.append(f"<blockquote>{inner}</blockquote>")
             continue
 
         opt = OPTION_RE.match(line)

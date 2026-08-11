@@ -104,7 +104,14 @@ python3 scripts/render_output.py answers.md   --footer "Source: lecture.pdf"
 
 - `questions.md` → **no answers anywhere** (verify before handing over)
 - `answers.md` → correct option, the full reasoning chain, and why each distractor is
-  wrong
+  wrong — **with a source citation on every hop and every distractor** (slide/page number
+  plus the source's own words). Gate 2 already quoted the source for each link; carry those
+  quotes into the key instead of discarding them. An uncited key can't be checked by the
+  student and hides the moment a hop drifted into outside knowledge.
+- Verify citations mechanically before delivering: every quoted string must appear verbatim
+  in the extracted text, under the slide/page it is attributed to.
+- A question that failed a gate ships with that failure marked **on the question itself**
+  in the key, not only in the chat report — the file outlives the conversation.
 
 HTML is self-contained and prints to PDF from any browser (Cmd+P) — no Word or LaTeX
 needed. Add `--docx` if the recipient wants to edit in Word.
@@ -131,3 +138,5 @@ chance, and anything unresolved.
 | "Questions look good, skip the judge" | Run all three gates. Not optional |
 | Judge inherits the session model, or one agent runs both the blind and sourced gates | Pass `model` explicitly; use separate agents |
 | Failures quietly dropped so the set looks clean | Report pass rate and every failure |
+| Answer key states a chain with no citation | Cite the slide/page and quote the source per hop — Gate 2 produced those quotes already |
+| A gate failure is mentioned only in chat | Mark it in the key too; the student reads the file, not the transcript |
