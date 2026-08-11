@@ -223,10 +223,45 @@ One row per question:
    different concepts with enumerable option sets; both then scored a 1.00 length ratio.
    Grinding a fourth round on a structurally cued set wastes tokens.
 
+## Same-model fallback (only when a cross-model subagent isn't available)
+
+Cross-model judging is the point of this harness, not an optional strengthening —
+"a model grading its own questions rates them well; it reconstructs the reasoning it
+just used and mistakes that fluency for question quality" (top of this file) is exactly
+as true when the same model self-critiques in the same conversation. Use this fallback
+only when the environment genuinely cannot spawn a subagent on a different model — e.g.
+this skill running as an uploaded Skill on claude.ai's plain Chat tab (not the Code tab),
+a single Claude instance with no `Agent` tool. If a cross-model subagent is available at
+all — including Claude Code's terminal, Desktop app Code tab, or claude.ai/code in a
+browser, which all support it — use it; this section is not a shortcut.
+
+Run the **same three gates, same prompts, same JSON shapes, and same scoring tables**
+already defined above (Gate 1, Gate 2, Gate 3) — nothing about the prompts changes.
+The only difference is who runs them:
+
+- No separate subagent: reason through each gate **sequentially, in strict isolation
+  from the others**. Run Gate 1 first, in a response that does not look back at the
+  drafted answer key or the source material. Only after recording Gate 1's verdicts,
+  move on to Gate 2 with the source; only after that, Gate 3.
+- Gates 1 and 2 still cannot be the same reasoning pass — the model must genuinely
+  attempt to forget the key and the source before Gate 1, the same way a human test-taker
+  would. If you cannot honestly separate "what would a blind guesser see" from "what do I
+  know the answer is," treat that question as **FAIL** for Gate 1 rather than reporting a
+  false pass.
+- This fallback cannot catch what cross-model judging exists to catch: a model's fluency
+  at reconstructing its own reasoning, mistaken for the question being sound. Treat every
+  PASS here as provisional.
+
+Every deliverable produced under this fallback must say so (see SKILL.md step 6) — never
+report fallback results as if the cross-model harness ran.
+
 ## Reporting to the user
 
 State plainly:
-- generator model, judge model, N requested vs N passing
+- generator model, judge model (or "same-model fallback" if no cross-model subagent was
+  available), N requested vs N passing
 - per-gate results, blind hit rate vs chance
 - any question that failed 3 rounds and why
 - if fewer than N survived, say so rather than padding with recall questions
+- if the same-model fallback ran, say so explicitly and note that pass results are
+  provisional, not equivalent to a cross-model verdict

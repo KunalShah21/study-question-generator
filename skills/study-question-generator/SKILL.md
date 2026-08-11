@@ -31,6 +31,10 @@ python3 scripts/extract_source.py SOURCE.pdf --pages 5-8,17-18 --out /tmp/source
 
 Handles pdf, pptx, docx, html, md, txt. Read the extracted text before writing anything.
 
+If the script can't run at all — no shell/Bash tool, or a missing dependency like
+`pypdf` in a sandboxed environment (e.g. this skill uploaded to claude.ai's Chat tab,
+not the Code tab) — read the source file directly instead of blocking on the script.
+
 ### 2. Inventory the facts
 
 List the discrete facts the source teaches and where each appears. Chaining is what makes
@@ -77,6 +81,16 @@ python3 scripts/check_mechanics.py questions.md --key C,A,D,B,C
 
 ### 5. Validate — required
 
+**Check first whether the Agent tool can spawn a subagent on a specific model.** In
+Claude Code — the terminal, the Desktop app's Code tab, or claude.ai/code in a browser,
+all three are the same engine — it can, so use the cross-model harness below exactly as
+written, nothing changes. If it can't (e.g. this skill is running as an uploaded Skill on
+claude.ai's plain Chat tab, a single conversation with no ability to hand off to a
+separate model), run the **same-model fallback** in `references/judge-protocol.md`
+instead, and mark every deliverable accordingly (see step 6). The fallback is strictly
+weaker — use it only when the cross-model harness genuinely isn't available, never as a
+shortcut.
+
 Read `references/judge-protocol.md` and run all three gates via subagents on a
 **different model** than the one generating (Opus generating → judge with Sonnet;
 Sonnet generating → judge with Opus; pass `model` explicitly to the Agent tool).
@@ -112,12 +126,16 @@ python3 scripts/render_output.py answers.md   --footer "Source: lecture.pdf"
   in the extracted text, under the slide/page it is attributed to.
 - A question that failed a gate ships with that failure marked **on the question itself**
   in the key, not only in the chat report — the file outlives the conversation.
+- If step 5 ran the same-model fallback instead of the cross-model harness, say so at the
+  top of `answers.md`: *"⚠️ Validated by same-model self-critique only — no cross-model
+  judge was available in this environment. Treat pass results with less confidence than a
+  Claude Code run."*
 
 HTML is self-contained and prints to PDF from any browser (Cmd+P) — no Word or LaTeX
 needed. Add `--docx` if the recipient wants to edit in Word.
 
-Report: generator model, judge model, N requested vs N passing, blind hit rate vs
-chance, and anything unresolved.
+Report: generator model, judge model (or "same-model fallback" if that's what ran), N
+requested vs N passing, blind hit rate vs chance, and anything unresolved.
 
 ## Red flags — stop and fix
 
@@ -140,3 +158,5 @@ chance, and anything unresolved.
 | Failures quietly dropped so the set looks clean | Report pass rate and every failure |
 | Answer key states a chain with no citation | Cite the slide/page and quote the source per hop — Gate 2 produced those quotes already |
 | A gate failure is mentioned only in chat | Mark it in the key too; the student reads the file, not the transcript |
+| Same-model fallback used when a cross-model subagent was actually available | Never take the weaker path as a shortcut; use it only when the environment genuinely can't spawn a different-model subagent |
+| Fallback ran but the key doesn't disclose it | State it at the top of `answers.md`, not only in chat |
