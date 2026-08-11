@@ -149,6 +149,14 @@ codes, named sites. When a source offers one, the whole class of surface-cue def
 disappears at once, and the question rests entirely on the fact chain. Prose options are
 harder to make safe; use them when no enumerable set fits the concept.
 
+One consequence for the mechanical screen: short opaque labels break `check_mechanics.py`'s
+length ratio. `CSB` (3) beside `TFIIH` (5) is a 1.67 ratio and `Mdm2` (4) beside `ATM` (3) is
+2.00 — both flagged, both fine, because a one- or two-character difference in an abbreviation
+carries no signal a reader could use. On abbreviation-heavy sets pass `--max-ratio 2.6` and
+judge the "correct option is longest" warning by eye: it matters for prose options, not for a
+five-character label. Never pad or truncate a source-verbatim name to satisfy the checker —
+that breaks grounding to fix nothing.
+
 ### Name options in the source's own words
 
 An option is only grounded if the source uses that word. A set drawn from the polymerase
@@ -232,6 +240,18 @@ matter how the options are worded.
    key, rewrite. The fix is usually to name the option in the **source's** vocabulary rather
    than the stem's — "sealed inside the cap" is the source's word and echoes nothing.
 
+   **A closed category can carry the echo in its own names.** The strongest defense — draw every
+   option from one enumerable source set — backfires when the set's members are named by
+   *antonym pairs* or otherwise describe themselves. A stem saying a compound "does nothing to
+   purified DNA but alters DNA inside intact cells" was keyed to `Indirect acting agents`, sitting
+   beside `Direct acting agents`. The blind judge hit it with `used_domain_knowledge: false`:
+   *"the stem lexically mirrors 'Indirect' and is the direct antonym of option B's word 'Direct',
+   ruling B out and pointing to C by elimination."* Homogeneity of form did not help, because the
+   *semantics of the labels themselves* encoded the answer. When a source category names its
+   members `direct`/`indirect`, `more accurate`/`less accurate`, `activating`/`inhibiting`, any
+   stem describing that axis leaks. Either key the question to a member outside the pair, or pick
+   a different category.
+
    Watch also for the *abstraction* echo in that third row: when three distractors are
    specific one-off acts and the answer is a general capability, the answer's grammatical
    altitude gives it away even with perfect length parity. Keep every option at the same
@@ -261,6 +281,8 @@ judge to report `used_domain_knowledge` explicitly for exactly this reason.
 - [ ] Every option at the same level of generality — not three specific acts plus one
       general capability
 - [ ] No option **paraphrases or conceptually mirrors** the stem's descriptive language
+- [ ] The option *names* themselves don't encode the answer — no antonym pair
+      (`direct`/`indirect`) whose axis the stem describes
 - [ ] Stem rules nothing out — no "normal", "identical", "unaffected" scaffolding that a
       guesser could cross options off with
 - [ ] Length parity holds; no `because` in any option

@@ -119,6 +119,7 @@ defect the previous round's rules did not cover, and every one is now encoded:
 | A stem paraphrasing `HATs` as "add acetyl groups" imports outside knowledge | Check the stem's paraphrases too |
 | Regrounding one question dropped it from 4 hops to 2 | The synonym *was* the hop — change concepts |
 | A vignette needed "HD"=Huntington, which the source never states | Pick a concept the source spells out — Bloom's symptoms are listed verbatim, Huntington's are not |
+| A closed category named by an antonym pair (`direct`/`indirect` agents) leaked through the labels themselves | Homogeneous form isn't enough — don't key to a member of a self-describing pair whose axis the stem describes |
 
 Two findings are worth more than the individual rules. **The gates pull against each
 other:** every fix that made a question unambiguous for the sourced judge handed the blind
