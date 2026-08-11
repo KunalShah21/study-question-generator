@@ -99,10 +99,14 @@ Those six failure modes are what the skill's rules encode against:
 | F6 | No vignette framing |
 
 **GREEN:** the same blind probe against a set written with the skill returned
-`cue_used: "none"` on **every question** — no surface tell to name. The sourced gate answered
-5/5 against the key at 3 hops each, quoting the source for every link.
+`cue_used: "none"` on **every question** — no surface tell to name. The sourced gate
+independently re-derived all five keyed answers at 3 hops each, `source_sufficient` on every
+one, quoting the source for every link. (The blind judge still *guessed* 4/5 correct — but
+self-reported `used_domain_knowledge: true` on each, and its one miss confirms it was
+reasoning from biology, not reading a cue. That gap is the measurement limit the protocol is
+explicit about.)
 
-Reaching that took seven rounds, and the value was in the failures. Each round found a
+Reaching that took eight rounds, and the value was in the failures. Each round found a
 defect the previous round's rules did not cover, and every one is now encoded:
 
 | Found | Rule added |
@@ -114,6 +118,7 @@ defect the previous round's rules did not cover, and every one is now encoded:
 | `Interfering` for the source's `mi/siRNA` was ungrounded | Use the source's own vocabulary |
 | A stem paraphrasing `HATs` as "add acetyl groups" imports outside knowledge | Check the stem's paraphrases too |
 | Regrounding one question dropped it from 4 hops to 2 | The synonym *was* the hop — change concepts |
+| A vignette needed "HD"=Huntington, which the source never states | Pick a concept the source spells out — Bloom's symptoms are listed verbatim, Huntington's are not |
 
 Two findings are worth more than the individual rules. **The gates pull against each
 other:** every fix that made a question unambiguous for the sourced judge handed the blind

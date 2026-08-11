@@ -171,6 +171,17 @@ and grounds cleanly.
 Check both directions before running the judge: every option word, and every stem
 paraphrase, must be traceable to text the source actually contains.
 
+**Grounding starts at concept selection, not wording.** A clinical vignette only grounds if
+the source states the *identifying features* that let a reader map the presentation back to
+it. A Huntington vignette (involuntary movements, affected parent, trinucleotide repeat)
+read as clean third-order, but the source never expands "HD" and never lists its symptoms —
+so the vignette→disease link needed outside knowledge and the judge returned
+`source_sufficient: false`. The fix was not a reword but a different disease: Bloom's, whose
+features the source *does* spell out verbatim ("Red facial butterfly rash... high risk
+cancer, short stature"). Before building a vignette, confirm the source itself contains the
+findings you plan to describe — if it only names the entity, the question is ungrounded no
+matter how the options are worded.
+
 ## Stem mechanics
 
 1. **Open with a vignette.** A patient presentation or lab-experiment setup. The source
