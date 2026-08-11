@@ -10,8 +10,8 @@ cross-model judge before delivery.
 
 **Core principle: a question a student can answer without knowing the material tests
 nothing.** Surface cues — a longer correct option, embedded reasoning, absurd
-distractors — make questions guessable. The judge harness exists to catch exactly that,
-and it is not optional.
+distractors — make questions guessable. The judge harness catches exactly that, and it is
+not optional.
 
 ## Inputs
 
@@ -53,15 +53,27 @@ from the chain, removing every bridging fact.
 
 ### 4. Write to the rules
 
-**Read `references/question-anatomy.md`** for the rubric, the three reusable patterns,
-and the distractor taxonomy. Summary of the non-negotiables:
+**Read `references/question-anatomy.md`** — the rubric, the reusable patterns, and the
+distractor taxonomy. The four non-negotiables:
 
-- **Stem:** vignette framing; observations only, never the mechanism the student must
-  supply; answer term and its category absent; one question, never "predict X and why";
-  some irrelevant detail; no meta-language (no order names, topics, or slide numbers).
-- **Options:** 4–5, same grammatical form, terse; longest ≤ ~1.3× shortest; none contain
-  `because`/`since`/`due to`; every distractor a **true source fact that answers a
-  neighboring question**; vary the correct position across the set.
+- **Stem:** vignette; observations only; the answer term and its category absent; one
+  question; no meta-language. **It rules nothing out** — strike any
+  `normal`/`identical`/`unaffected` clause the mechanism doesn't need.
+- **Options:** 4–5 from **one closed source category**, in the source's own vocabulary,
+  identical grammatical form, same level of generality. Best case is an enumerated label set
+  with no descriptive content (`TFIID…TFIIH`, `Asn/Gln/Ser/Thr/Tyr`) — nothing to cue on.
+- **Every distractor a true source fact** that answers a neighboring question. Longest
+  ≤ ~1.3× shortest, no `because`/`since`/`due to`, vary the correct position.
+- **No semantic echo:** the key must not paraphrase the stem. `barrel-shaped` → `cavity` and
+  `add and remove` → `adjusting` were each picked blind despite sharing no words.
+
+Resolve ambiguity in the options, never by narrating exclusions in the stem.
+
+Then pre-screen mechanically before spending judge tokens:
+
+```bash
+python3 scripts/check_mechanics.py questions.md --key C,A,D,B,C
+```
 
 ### 5. Validate — required
 
@@ -104,15 +116,18 @@ chance, and anything unresolved.
 
 | Red flag | Fix |
 |---|---|
-| Correct option is longest, or the only one explaining itself | Equalize length; move rationale to the key |
-| An option contains `because` / `since` / `due to` | Strip it; one claim per option |
+| Correct option is longest, or the only one explaining itself; any option has `because`/`since`/`due to` | Equalize length; rationale belongs in the key |
 | A distractor is absurd ("Magnets") or absolute ("no effect") | Replace with a true source fact from a neighboring step |
-| Stem states the mechanism or names the answer's category | Rewrite as observations only |
-| Chain is ≤2 hops | Extend the chain or drop the question |
-| Stem still answerable with options covered | Options leak — rewrite them |
+| Stem states the mechanism, names the answer's category, or says a step is `normal`/`identical`/`unaffected` | Observations only. That clause is an elimination path for guessers |
+| "The stem needs that clause or the answer is ambiguous" | Fix the options instead — a homogeneous set is unambiguous without exclusions |
+| Options span categories, use a synonym the source never uses, or mix one general capability with three specific acts | Redraw from one closed category, in the source's words, at one level of generality |
+| The correct option restates the stem in different words | Rewrite in the source's vocabulary — semantic echo is invisible to `check_mechanics.py` |
+| Stem paraphrases an abbreviation the source never expands (`HATs` → "add acetyl groups") | Use the source's own phrase; expanding it silently imports outside knowledge |
+| Chain is ≤2 hops, or the stem is still answerable with options covered | Extend the chain / rewrite the leaking options, or drop it |
+| Hop count dropped after you fixed grounding | The removed synonym *was* the third hop — change concepts, don't restore it |
+| Third rewrite still fails | Replace the concept. Some option sets are permanently cued (five transcript parts = two pairs + one odd) |
 | Wrote the stem before the chain | Chain first, vignette backwards from it |
 | Source too thin for N | Cap N and say so; never pad with recall questions |
 | "Questions look good, skip the judge" | Run all three gates. Not optional |
-| Judge inherits the session model | Pass `model` explicitly — never same-model judging |
-| One agent runs both blind and sourced gates | Use separate agents |
+| Judge inherits the session model, or one agent runs both the blind and sourced gates | Pass `model` explicitly; use separate agents |
 | Failures quietly dropped so the set looks clean | Report pass rate and every failure |

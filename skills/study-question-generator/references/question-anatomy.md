@@ -121,6 +121,56 @@ is spelled out. A blind test-taker picks it without knowing any biology.
 > C. Disulfide bond formation
 > D. Increased hydrogen bonding
 
+### Draw all options from one closed category
+
+Parity of *length* is not enough. If the options name things from different categories, a
+blind reader sorts them by category and the odd one out is visible. Pull every option from
+a single enumerable set in the source — the three polymerases, the four ribosome sites, the
+named chaperones, the parts of a mature transcript — in identical grammatical form:
+
+> A. Small nuclear transcripts
+> B. Transfer transcripts
+> C. Interfering transcripts
+> D. Ribosomal transcripts
+
+Now no option is distinguishable by form, and picking requires knowing which polymerase was
+hit. This is the strongest single defense against blind guessing, and it comes free: a
+closed source category *is* a ready-made set of true-but-wrong-step distractors.
+
+### Prefer opaque labels for options
+
+The best-performing option sets in testing were **enumerated labels with no descriptive
+content at all** — `TFIID / TFIIB / TFIIE / TFIIF / TFIIH`, or `Asn / Gln / Ser / Thr / Tyr`.
+Both scored a 1.00 length ratio and gave the blind judge literally nothing to work with: you
+cannot echo a stem, embed reasoning, or leak generality in a five-character abbreviation.
+
+Look for these in the source first — factor families, numbered enzymes, three-letter residue
+codes, named sites. When a source offers one, the whole class of surface-cue defects
+disappears at once, and the question rests entirely on the fact chain. Prose options are
+harder to make safe; use them when no enumerable set fits the concept.
+
+### Name options in the source's own words
+
+An option is only grounded if the source uses that word. A set drawn from the polymerase
+table looked homogeneous and passed every mechanical check, but the source says *mi/siRNA*
+and the option said *Interfering transcripts* — the sourced judge returned
+`source_sufficient: false`, noting that mapping one to the other "requires knowing that
+si/miRNA are conventionally called 'interfering' RNA, a label the source itself never uses."
+
+Homogeneity is about *form*; grounding is about *vocabulary*. A closed category satisfies
+both only when you name its members the way the source names them.
+
+**The same trap sits in the stem.** Lecture notes are full of bare abbreviations. A stem
+describing "both enzyme families that add and remove acetyl groups on histone tails" reads
+as a careful paraphrase of `HATs, HDACs` — but the source never expands those letters, so
+recognizing the match requires knowing what they stand for. The judge failed it:
+*"the source only lists the bare abbreviations alongside 'chromatin remodeling'."* Describing
+them as "the enzyme families credited with chromatin remodeling" uses the source's own phrase
+and grounds cleanly.
+
+Check both directions before running the judge: every option word, and every stem
+paraphrase, must be traceable to text the source actually contains.
+
 ## Stem mechanics
 
 1. **Open with a vignette.** A patient presentation or lab-experiment setup. The source
@@ -137,6 +187,56 @@ is spelled out. A blind test-taker picks it without knowing any biology.
    one is best.
 7. **No meta-language.** Never write "this cross-topic question" or "per the slides."
    Students see none of that on a real exam.
+8. **Never rule out the distractors in the stem.** This one is counter-intuitive and cost
+   a full test round. Writing *"the promoter and sequence are identical, and transcription
+   rates are equal"* feels like precision — it removes ambiguity so the answer is
+   unarguable. But it hands the reader a process-of-elimination path that needs no domain
+   knowledge: cross off promoter, cross off rate, and only one option is left standing.
+   A blind judge named exactly this cue: *"stem explicitly rules out promoter/sequence/rate
+   differences, leaving only the option not yet excluded."*
+
+   Give only the **positive findings** the student must interpret. State a normal finding
+   only when the *mechanism* depends on it — "unfolded clients still bind its hydrophobic
+   surfaces" localizes the lesion to the ATP step and is load-bearing. Compare:
+
+   | ❌ Exclusionary | ✅ Positive only |
+   |---|---|
+   | "Ribosomes, mRNA, and elongation machinery all function normally" | "The enzyme still consumes ATP and charges its tRNA at a normal rate" |
+   | "Its sequence and promoter are identical and it is transcribed at equal rates" | "Sequencing confirms the gene is identical in both tissues" |
+
+   Rule of thumb: if striking a "normal/identical/unaffected" clause does not change the
+   correct answer, it was scaffolding for the guesser. Strike it.
+
+9. **No semantic echo between stem and answer.** Sharing no *words* is not enough. A blind
+   judge found the key three times running through pure paraphrase:
+
+   | Stem said | Correct option said | Judge's cue |
+   |---|---|---|
+   | "barrel-shaped" | "sealed inside the **cavity**" | *"the only option that explicitly names a cavity"* |
+   | "accepts a second, chemically similar amino acid" | "holding the **wrong residues**" | *"directly restates that mismatch"* |
+   | enzymes that "**add and remove**" marks | "**Adjusting** DNA access" | *"the only bidirectional capability; A/B/C name narrow one-off actions"* |
+
+   None of these share a word long enough for a mechanical checker to flag. Read the stem
+   and ask: *which option sounds most like a restatement of the vignette?* If that is the
+   key, rewrite. The fix is usually to name the option in the **source's** vocabulary rather
+   than the stem's — "sealed inside the cap" is the source's word and echoes nothing.
+
+   Watch also for the *abstraction* echo in that third row: when three distractors are
+   specific one-off acts and the answer is a general capability, the answer's grammatical
+   altitude gives it away even with perfect length parity. Keep every option at the same
+   level of generality.
+
+**The two gates pull against each other.** Exclusionary stems help gate 2 (answerability)
+and destroy gate 1 (blind guessing). Resolve it in the *options*, never the stem: a
+homogeneous closed-category set makes the answer unambiguous without narrating any
+eliminations.
+
+**Gate 1 has a measurement limit worth knowing.** A frontier model cannot fully suppress
+what it knows, so it sometimes answers from domain knowledge and back-fills a plausible
+"cue." Treat a named cue as real only if a reader with zero subject knowledge could see it.
+*"The 5' cap and poly-A tail are added separately from splicing"* is biology, not a surface
+cue, and rewriting to satisfy it degrades the question. The blind prompt should tell the
+judge to report `used_domain_knowledge` explicitly for exactly this reason.
 
 ## Self-check before accepting a question
 
@@ -145,6 +245,13 @@ is spelled out. A blind test-taker picks it without knowing any biology.
 - [ ] Answer term and its category absent from the stem
 - [ ] Cover the options: is the stem still answerable? (If yes, the options leak.)
 - [ ] Every distractor true-but-wrong-step, none absurd, none absolute
+- [ ] All options from one closed source category, identical grammatical form
+- [ ] Each option named in the **source's own vocabulary**, not a synonym for it
+- [ ] Every option at the same level of generality — not three specific acts plus one
+      general capability
+- [ ] No option **paraphrases or conceptually mirrors** the stem's descriptive language
+- [ ] Stem rules nothing out — no "normal", "identical", "unaffected" scaffolding that a
+      guesser could cross options off with
 - [ ] Length parity holds; no `because` in any option
 - [ ] Exactly one defensible answer
 - [ ] A student who knows the material but is bad at test-taking gets it **right**;

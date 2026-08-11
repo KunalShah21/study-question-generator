@@ -72,6 +72,11 @@ mistakes that fluency for quality.
 Gates 1 and 2 must be different agents: one that has read the source cannot perform a
 credible blind pass.
 
+One caveat the protocol is explicit about: a frontier model cannot fully suppress what it
+knows, so the blind judge will sometimes answer from domain knowledge and back-fill a
+plausible-sounding "cue." Only treat a cue as real if a reader with zero subject knowledge
+could have seen it — the judge is asked to report `used_domain_knowledge` for that reason.
+
 ## Development
 
 Built test-first, per the `writing-skills` discipline. The baseline (RED) run generated
@@ -93,6 +98,34 @@ Those six failure modes are what the skill's rules encode against:
 | F5 | Meta-language leaks into student-facing text |
 | F6 | No vignette framing |
 
+**GREEN:** the same blind probe against a set written with the skill returned
+`cue_used: "none"` on **every question** — no surface tell to name. The sourced gate answered
+5/5 against the key at 3 hops each, quoting the source for every link.
+
+Reaching that took seven rounds, and the value was in the failures. Each round found a
+defect the previous round's rules did not cover, and every one is now encoded:
+
+| Found | Rule added |
+|---|---|
+| Exclusionary stems ("X and Y are normal") hand over an elimination path | Positive findings only |
+| Options from different categories let a reader sort by category | Draw from one closed source category |
+| `barrel-shaped` → `cavity` was picked blind despite sharing no words | No semantic echo, even paraphrased |
+| Three specific acts + one general capability cues the general one | Level the generality |
+| `Interfering` for the source's `mi/siRNA` was ungrounded | Use the source's own vocabulary |
+| A stem paraphrasing `HATs` as "add acetyl groups" imports outside knowledge | Check the stem's paraphrases too |
+| Regrounding one question dropped it from 4 hops to 2 | The synonym *was* the hop — change concepts |
+
+Two findings are worth more than the individual rules. **The gates pull against each
+other:** every fix that made a question unambiguous for the sourced judge handed the blind
+judge a new shortcut. The resolution is always in the options, never the stem. And **the
+strongest option sets are opaque labels** — `TFIID…TFIIH`, `Asn/Gln/Ser/Thr/Tyr` — which
+scored a 1.00 length ratio and gave the blind judge nothing at all to work with.
+
+`scripts/check_mechanics.py` automates the mechanical subset (length parity, embedded
+reasoning, absolutes, answer clustering) so judge tokens go to what only a judge can see. It
+caught four real defects in a single round. It cannot see semantic echo — that needs the
+blind gate.
+
 ## Layout
 
 ```
@@ -103,6 +136,7 @@ skills/study-question-generator/
     judge-protocol.md           judge prompts, gates, verdict shape
   scripts/
     extract_source.py           pdf/pptx/docx/html/md → text, with page filter
+    check_mechanics.py          pre-judge screen: parity, absolutes, answer clustering
     render_output.py            md → print-ready HTML (+ docx via pandoc)
 ```
 

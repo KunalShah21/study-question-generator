@@ -38,10 +38,18 @@ You are taking a multiple-choice exam. You have NO access to any source material
 textbook, or notes, and you must NOT use subject-matter knowledge to reason about the
 content.
 
-Answer using ONLY test-taking heuristics: option length, grammatical parallelism,
-how much detail an option gives, whether an option contains absolutes (never, no
-effect, entirely), whether an option embeds its own justification, and which option
-"looks like" what an exam writer would mark correct.
+Answer using ONLY test-taking heuristics based on the SURFACE FORM of the text:
+option length, grammatical parallelism, how much detail an option gives, whether an
+option contains absolutes (never, no effect, entirely), whether an option embeds its
+own justification, whether an option repeats or paraphrases wording from the stem,
+whether the stem rules out other options, and which option "looks like" what an exam
+writer would mark correct.
+
+If you find yourself reasoning about what is true in the subject matter, STOP — that
+is domain knowledge and it is forbidden here. In that case record a random guess with
+cue_used "none" and confidence "none". A cue must be something a reader with zero
+subject knowledge could see. Do not back-fill a surface-sounding cue for an answer you
+actually derived from knowledge.
 
 For each question: state your guess and name the specific surface cue that led you
 there, or "none" if you were genuinely guessing at random.
@@ -50,8 +58,14 @@ there, or "none" if you were genuinely guessing at random.
 
 Return one JSON array and no prose:
 [{"question_id": 1, "blind_guess": "C", "cue_used": "longest option; only one with a
-mechanism", "confidence": "high|medium|none"}]
+mechanism", "confidence": "high|medium|low|none", "used_domain_knowledge": false}]
 ```
+
+**Read the cues, not just the score.** A frontier model cannot fully suppress what it
+knows; it will sometimes answer from domain knowledge and back-fill a plausible-sounding
+cue. *"The 5' cap and poly-A tail are added separately from splicing"* is biology, not a
+surface cue — rewriting to defeat it makes the question worse. Discount any cue a reader
+with zero subject knowledge could not have seen, and count that question as a pass.
 
 **Scoring.** With *k* options, random guessing yields ≈1/*k*.
 
@@ -171,18 +185,43 @@ One row per question:
 1. Report the pass rate and each failure reason. **Never silently drop failures** —
    a set that quietly shrinks from 10 to 6 misrepresents what was delivered.
 2. Rewrite failures against the specific reason:
-   - *Blind-guessable* → equalize option length; move rationale to the key; replace
-     absolutes with true-but-wrong-step facts.
+   - *Blind-guessable* → redraw all options from **one closed source category** in
+     identical form; equalize length; move rationale to the key. If the judge's cue was
+     *elimination* ("the stem rules out the others"), the fix is in the **stem**: delete
+     every `normal` / `identical` / `unaffected` clause the mechanism doesn't need.
    - *Two defensible answers* → narrow with "most directly"/"most likely," or replace
      the competing option.
    - *Order too low* → remove the bridging fact from the stem, or extend the chain.
    - *Answer in stem* → rewrite as observations only.
-   - *Ungrounded* → replace with a fact the source states.
+   - *Ungrounded* (`source_sufficient: false`) → the vignette leans on outside knowledge.
+     Usually the trigger detail is too oblique: a mushroom "gathered at the base of an oak"
+     with coagulopathy requires clinical toxicology the source never states. Name the thing
+     the source itself names ("identified as a death cap") and let the hops run from there.
 3. Re-run **all three gates** on rewrites. A rewrite is a new question, not a patch;
    fixing length parity can easily introduce a second defensible answer.
-4. Cap at 3 rewrite rounds per question. Beyond that, report it as unresolved with the
-   reason instead of grinding — some source material simply cannot support a
-   third-order question on that concept.
+
+   *Hop count collapsed after regrounding* → the vocabulary step you removed **was** a hop.
+   A question asking which transcript class a death-cap-poisoned polymerase stops making ran
+   4 hops while the answer was `Interfering` (the source says `mi/siRNA`) and dropped to 2 as
+   soon as the option was renamed to the source's literal `protein-coding` — the source links
+   mushroom → Pol II → mRNA in a single clause. Do not restore the synonym; the question was
+   never third order, the ungrounded step was only *masquerading* as one. Find a concept
+   whose chain is 3 hops in the source's own vocabulary.
+
+   Expect fixes to fight each other. Real sequences from building this skill:
+   equalizing length made the correct option the longest; fixing that clustered three
+   answers on B; adding exclusions for gate 2 handed gate 1 an elimination path. Run
+   `scripts/check_mechanics.py` after every edit and re-check the whole set, not the
+   question you touched. When an option is unavoidably the longest because its
+   category word just *is* longer (`Interfering` vs `Ribosomal`), lengthen a distractor
+   rather than mangling the answer.
+4. Cap at 3 rewrite rounds per question. Beyond that, **replace the concept rather than
+   patching the question** — or report it unresolved. Some option sets carry a defect no
+   wording fixes: the five parts of a mature transcript contain two natural pairs (two
+   termini, two UTRs), which leaves the coding sequence permanently the odd one out, and a
+   blind judge said so. Two questions in this build hit the cap and were rewritten onto
+   different concepts with enumerable option sets; both then scored a 1.00 length ratio.
+   Grinding a fourth round on a structurally cued set wastes tokens.
 
 ## Reporting to the user
 
