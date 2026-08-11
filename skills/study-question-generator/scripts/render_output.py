@@ -7,8 +7,8 @@ lowest-friction path for a non-technical recipient: no Word, no LaTeX, no fonts
 to install.
 
 Handles the Markdown subset this skill emits: headings, paragraphs, bullet and
-option lists, bold/italic/code, blockquotes and horizontal rules. Written
-against the stdlib so HTML output never depends on pandoc being present.
+option lists, pipe tables, bold/italic/code, blockquotes and horizontal rules.
+Written against the stdlib so HTML output never depends on pandoc being present.
 
 Usage:
     render_output.py questions.md [--out questions.html] [--docx] [--title "..."]
@@ -53,6 +53,15 @@ blockquote { margin:.9rem 0; padding:.1rem 0 .1rem 1rem;
 ul { margin:.2rem 0 1rem; padding-left:1.35rem; }
 li { margin:.3rem 0; }
 
+/* Distractor tables: the answer key leans on these heavily. */
+table { border-collapse: collapse; width:100%; margin:.7rem 0 1.3rem;
+  font-size:.93rem; break-inside: avoid; page-break-inside: avoid; }
+th, td { border:1px solid var(--rule); padding:.42rem .6rem;
+  text-align:left; vertical-align:top; }
+th { background: var(--shade); font-weight:700; color:var(--accent);
+  font-size:.82rem; text-transform:uppercase; letter-spacing:.02em; }
+tbody tr:nth-child(even) td { background:#fbfbfc; }
+
 /* Answer options: hanging letter, generous click/pencil room, never split. */
 ul.options { list-style:none; padding-left:0; margin:.6rem 0 1.1rem; }
 ul.options li {
@@ -96,6 +105,36 @@ PAGE = """<!DOCTYPE html>
 OPTION_RE = re.compile(r"^\s*(?:[-*]\s+)?([A-J])[.)]\s+(.*)$")
 BULLET_RE = re.compile(r"^\s*[-*+]\s+(.*)$")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+# The delimiter row is what distinguishes a table from prose containing pipes.
+TABLE_DELIM_RE = re.compile(r"^\s*\|(?:\s*:?-{1,}:?\s*\|)+\s*$")
+
+
+def split_row(line: str) -> list[str]:
+    """Split a pipe-table row into cells, honouring \\| escapes."""
+    body = line.strip()
+    body = body[1:] if body.startswith("|") else body
+    body = body[:-1] if body.endswith("|") else body
+    cells = re.split(r"(?<!\\)\|", body)
+    return [c.strip().replace(r"\|", "|") for c in cells]
+
+
+def render_table(header: str, rows: list[str]) -> str:
+    """Build an HTML table from a Markdown header row plus its body rows."""
+    head = split_row(header)
+    ncols = len(head)
+    parts = ["<table>", "<thead>", "<tr>"]
+    parts += [f"<th>{inline(c)}</th>" for c in head]
+    parts += ["</tr>", "</thead>", "<tbody>"]
+    for row in rows:
+        cells = split_row(row)
+        # Pad or trim so a ragged row cannot break the column grid.
+        cells = (cells + [""] * ncols)[:ncols]
+        parts.append("<tr>")
+        parts += [f"<td>{inline(c)}</td>" for c in cells]
+        parts.append("</tr>")
+    parts += ["</tbody>", "</table>"]
+    return "\n".join(parts)
 
 
 def inline(text: str) -> str:
@@ -143,12 +182,29 @@ def md_to_html(md: str) -> str:
             out.append("</section>")
             in_question = False
 
-    for raw in lines:
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        i += 1
         line = raw.rstrip()
 
         if not line.strip():
             flush_para()
             flush_list()
+            continue
+
+        # A table is a header row followed by a delimiter row; consume the block.
+        if (TABLE_ROW_RE.match(line)
+                and i < len(lines)
+                and TABLE_DELIM_RE.match(lines[i].rstrip())):
+            flush_para()
+            flush_list()
+            i += 1  # skip the delimiter
+            body: list[str] = []
+            while i < len(lines) and TABLE_ROW_RE.match(lines[i].rstrip()):
+                body.append(lines[i].rstrip())
+                i += 1
+            out.append(render_table(line, body))
             continue
 
         heading = HEADING_RE.match(line)
