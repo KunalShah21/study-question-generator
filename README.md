@@ -16,39 +16,58 @@ guessable questions before they reach a student. The rules themselves apply to a
 
 ## Install
 
-No git needed. Two options:
-
-**A. Claude Code — best validation.** Use it via the [Desktop app](https://claude.ai/download)
-(Code tab), [claude.ai/code](https://claude.ai/code) in a browser, or the terminal
-(`curl -fsSL https://claude.ai/install.sh | bash` on Mac/Linux, `irm
-https://claude.ai/install.ps1 | iex` on Windows). Then:
-
-1. On this repo's GitHub page: **Code → Download ZIP**, then unzip.
-2. Move the `skills/study-question-generator` folder into `~/.claude/skills/`
-   (Mac/Linux) or `%USERPROFILE%\.claude\skills\` (Windows).
-3. Open Claude Code and type `/study-question-generator`, or just ask for practice
-   questions from a file.
-
-<details>
-<summary>git users</summary>
+One line, in a terminal. Mac/Linux:
 
 ```bash
-git clone <this repo> && cd study-question-generator
-ln -s "$PWD/skills/study-question-generator" ~/.claude/skills/study-question-generator
+curl -fsSL https://raw.githubusercontent.com/KunalShah21/study-question-generator/main/install.sh | bash
 ```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/KunalShah21/study-question-generator/main/install.ps1 | iex
+```
+
+It installs into `~/.claude/skills/` (`%USERPROFILE%\.claude\skills\` on Windows), checks
+that Python 3.9+ is present, tells you which optional extras you're missing and what each
+one costs, and runs a smoke test. Then open Claude Code and type
+`/study-question-generator`, or just ask for practice questions from a file.
+
+Piping a script from the internet into your shell deserves a look first — it's
+[install.sh](install.sh) / [install.ps1](install.ps1), and `--help`, `--dry-run`, `--link`,
+`--copy` and `--zip` are all there.
+
+<details>
+<summary>Using git, or installing by hand</summary>
+
+Clone it and the installer symlinks instead of copying, so `git pull` updates the skill:
+
+```bash
+git clone https://github.com/KunalShah21/study-question-generator.git
+cd study-question-generator && ./install.sh
+```
+
+Or skip the script entirely: on this repo's GitHub page hit **Code → Download ZIP**, unzip,
+and move the `skills/study-question-generator` folder into `~/.claude/skills/` (Mac/Linux)
+or `%USERPROFILE%\.claude\skills\` (Windows).
 
 </details>
 
-**B. claude.ai's Chat tab — no Claude Code needed, weaker validation.** Requires a Pro,
-Max, Team, or Enterprise plan with code execution enabled.
+<details>
+<summary>No Claude Code? Use claude.ai's Chat tab (weaker validation)</summary>
 
-1. Download and unzip as above.
-2. Zip up just the `study-question-generator` folder (not the whole repo).
-3. **Settings → Features → Skills** on claude.ai, and upload that zip.
-4. Ask Claude for practice questions from a document you upload.
+Requires a Pro, Max, Team, or Enterprise plan with code execution enabled.
+
+1. `./install.sh --zip` builds `study-question-generator.zip` with the folder at the zip
+   root, which is the layout the uploader wants. (By hand: zip up just the
+   `study-question-generator` folder, not the whole repo.)
+2. **Settings → Features → Skills** on claude.ai, and upload that zip.
+3. Ask Claude for practice questions from a document you upload.
 
 > ⚠️ This surface can't hand validation to a separate model, so it self-critiques
-> instead — weaker, and disclosed in the delivered answer key. Use Option A when you can.
+> instead — weaker, and disclosed in the delivered answer key. Use Claude Code when you can.
+
+</details>
 
 ## Usage
 
