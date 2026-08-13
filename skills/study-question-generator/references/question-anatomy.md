@@ -137,17 +137,29 @@ Now no option is distinguishable by form, and picking requires knowing which pol
 hit. This is the strongest single defense against blind guessing, and it comes free: a
 closed source category *is* a ready-made set of true-but-wrong-step distractors.
 
-### Prefer opaque labels for options
+### Default to opaque labels for options
+
+**Enumerated labels are the default. Prose options need a reason.**
 
 The best-performing option sets in testing were **enumerated labels with no descriptive
 content at all** — `TFIID / TFIIB / TFIIE / TFIIF / TFIIH`, or `Asn / Gln / Ser / Thr / Tyr`.
 Both scored a 1.00 length ratio and gave the blind judge literally nothing to work with: you
 cannot echo a stem, embed reasoning, or leak generality in a five-character abbreviation.
 
-Look for these in the source first — factor families, numbered enzymes, three-letter residue
-codes, named sites. When a source offers one, the whole class of surface-cue defects
-disappears at once, and the question rests entirely on the fact chain. Prose options are
-harder to make safe; use them when no enumerable set fits the concept.
+So **look for an enumerable set in the source before choosing the concept**, not after
+drafting the options — factor families, numbered enzymes, three-letter residue codes, named
+sites, named repair pathways. When a source offers one, the whole class of surface-cue defects
+disappears at once and the question rests entirely on the fact chain.
+
+This is a cost rule as much as a quality rule. Every surface-cue defect an opaque label set
+makes impossible is a gate-1 failure that never happens, and a rewrite round never spent — and
+the two questions in this build that hit the 3-round cap were both rescued by switching to
+enumerable sets, scoring 1.00 immediately (see `judge-protocol.md`, "Handling failures"). It is
+cheaper to pick a concept with an enumerable option set than to fix a prose set the blind judge
+cued on.
+
+Reach for prose options only when no enumerable set fits the concept, and expect them to take
+more rounds to make safe.
 
 `check_mechanics.py` skips length checks entirely on these sets and says so, because a ratio
 over 3- and 4-character acronyms is noise: `CSB` beside `TFIIH` computes to 1.67 and carries
@@ -164,6 +176,12 @@ si/miRNA are conventionally called 'interfering' RNA, a label the source itself 
 
 Homogeneity is about *form*; grounding is about *vocabulary*. A closed category satisfies
 both only when you name its members the way the source names them.
+
+`check_mechanics.py --source` now catches this class for free: it flags any distinctive word in
+an option that the source never uses, which is exactly the `Interfering` above. Run it with
+`--source` and the expensive version of this failure — discovering it from gate 2's
+`source_sufficient: false` — mostly stops happening. It checks options only, because a stem is
+*supposed* to describe a vignette in fresh words.
 
 **The same trap sits in the stem.** Lecture notes are full of bare abbreviations. A stem
 describing "both enzyme families that add and remove acetyl groups on histone tails" reads
@@ -275,6 +293,7 @@ judge to report `used_domain_knowledge` explicitly for exactly this reason.
       (If no, the option list is carrying the question.)
 - [ ] Every distractor true-but-wrong-step, none absurd, none absolute
 - [ ] All options from one closed source category, identical grammatical form
+- [ ] Options are enumerated labels, or there's a reason they can't be
 - [ ] Each option named in the **source's own vocabulary**, not a synonym for it
 - [ ] Every option at the same level of generality — not three specific acts plus one
       general capability

@@ -98,32 +98,58 @@ mechanism. That absence is the whole design.
 
 ## The judge harness
 
-Three gates, each a separate subagent on a **different model** than the one that wrote the
-questions — a model grading its own questions reconstructs the reasoning it just used and
-mistakes that fluency for quality. Model pairing: Opus generates → judge with Sonnet;
-Sonnet generates → judge with Opus; Haiku never judges the answerability gate, since a
-capability gap there reads as a false question defect.
+Three gates, each a separate subagent, and **never on the model that wrote the questions** — a
+model grading its own questions reconstructs the reasoning it just used and mistakes that
+fluency for quality.
 
-1. **Blind-cue gate** — judge sees the questions with _no source material_ and may use only
-   test-taking heuristics. If it finds the keyed answer and can name the surface cue, the
-   question fails and gets rewritten.
-2. **Answerability gate** — a separate agent, _with_ the source, must pick the keyed
-   answer, reconstruct the reasoning chain, and quote the source passage for each link.
-3. **Order audit** — hop count ≥3, answer term absent from the stem, the stem answerable on
-   its own once the options are covered, every distractor a true source fact.
+1. **Blind-cue gate** (Haiku 4.5) — judge sees the questions with _no source material_ and may
+   use only test-taking heuristics. If it finds the keyed answer and can name the surface cue,
+   the question fails and gets rewritten. The cheapest model does this one identically, because
+   the gate forbids reasoning about the subject at all.
+2. **Answerability gate** (Opus 5) — a separate agent, _with_ the source, must pick the keyed
+   answer, reconstruct the reasoning chain, and quote the source passage for each link. This one
+   needs a capable model: a judge that fails a hard question for lack of capability reads as a
+   false question defect.
+3. **Order audit** (same agent as gate 2) — hop count ≥3, answer term absent from the stem, the
+   stem answerable on its own once the options are covered, every distractor a true source fact.
 
 Gates 1 and 2 must be different agents: one that has read the source cannot perform a
 credible blind pass. Gate 3 runs as a second turn in the gate-2 agent, which already has the
-source loaded — two spawns per round, not three.
+source loaded — two spawns per round, not three — and the two agents are spawned in parallel,
+since nothing reads gate 1's output until the verdicts are combined.
 
-**Cost.** Judge spawns are what this skill spends, so the loop is scoped: round 1 judges the
-full set, later rounds judge only the questions that failed, a clean round ends the loop, and
-each question is capped at 3 rewrite rounds. The free `check_mechanics.py` screen has to pass
-before any judge is spawned, and it re-checks the whole set — parity, absolutes, answer-position
-clustering — after every edit. Those checks live only in the script: the judge prompts
+Each judge is given **file paths and reads them itself** — gate 1 the question file only, gates
+2+3 the questions and the source. The question set is never pasted into a prompt, which is what
+keeps it out of the orchestrating session's context (see **Cost** below).
+
+**Cost.** The dominant cost of a run is not the judges: it's writing the questions. Written
+turn-by-turn in one conversation, every new question is drafted with the source, the fact
+inventory, and all previous questions in context, so cost grows roughly quadratically in the
+number of questions.
+
+So the main session orchestrates and **moves file paths rather than content**. The extracted
+source, the fact inventory, and the question text never enter it: extraction and merging are
+shell commands, the fact inventory is written to a file by its own Sonnet subagent, questions are
+written to one file per batch by **parallel Sonnet subagents of ~5 questions each**, and the
+judges are handed paths to read. What the orchestrator holds is paths, JSON verdicts, and exit
+codes. Judging stays pooled over the whole set, which keeps the source read once and keeps the
+blind gate's set-wide check statistically meaningful.
+
+That has a consequence worth being explicit about: **nobody looks at the set before it ships.**
+So the two things a human would have caught by eye are mechanical gates instead —
+`--assert-no-answers` fails the run if the student-facing file contains an answer, a rationale,
+or the chain scaffolding a generator drafted with, and `--answers` fails it on a fabricated or
+misattributed quote in the key. Neither is a report; both exit non-zero.
+
+The judge loop is scoped on top of that: round 1 judges the full set, later rounds judge only
+the questions that failed, a clean round ends the loop, each question is capped at 3 rewrite
+rounds, and rewrites go to parallel Sonnet subagents rather than back into the orchestrator's
+context. The free `check_mechanics.py` screen has to pass before any judge is spawned, and it
+re-checks the whole set — parity, absolutes, answer-position clustering, and option vocabulary
+against the source — after every edit. Those checks live only in the script: the judge prompts
 deliberately don't re-ask for them, since a judge re-deriving a threshold the script already
 enforced can only disagree with it, and every disagreement costs a rewrite round. Each run
-reports the spawns it used.
+reports the spawns it used and the rewrite rounds per question.
 
 One caveat the protocol is explicit about: a frontier model cannot fully suppress what it
 knows, so the blind judge will sometimes answer from domain knowledge and back-fill a
@@ -143,11 +169,16 @@ from any browser (Cmd+P / Ctrl+P) — no Word or LaTeX required. Pass `--docx` i
 recipient wants to edit in Word.
 
 - `questions.md` — the vignette and options only, **no answers anywhere**.
+  `check_mechanics.py --assert-no-answers` enforces that before delivery: an answer line, a
+  heading ending in an answer letter, a rationale section, a hop count, or a leftover chain
+  arrow fails the run and names the line it's on.
 - `answers.md` — the correct option, the full reasoning chain, and why every distractor is
   wrong, **with a source citation on every hop and every distractor**: the page or slide
   number plus the source's own words. The answerability gate already quotes the source for
   each link; those quotes carry through into the key instead of being discarded, so a
   student (or anyone auditing the key) can check every claim against the original material.
+  `check_mechanics.py --answers` verifies them before delivery: a quote that isn't in the
+  source, or is attributed to the wrong page, fails the run.
 - A question that fails a gate ships with that failure marked **on the question itself** in
   the key, not only reported in chat — the file outlives the conversation.
 
@@ -161,7 +192,9 @@ skills/study-question-generator/
     judge-protocol.md           judge prompts, gates, verdict shape
   scripts/
     extract_source.py           pdf/pptx/docx/html/md → text, with page filter
-    check_mechanics.py          pre-judge screen: parity, absolutes, answer clustering
+    check_mechanics.py          pre-judge screen: parity, absolutes, answer clustering,
+                                option vocabulary vs source. Also the delivery gates:
+                                answer-key citations, and answer leaks in the question file
     render_output.py            md → print-ready HTML (+ docx via pandoc)
 ```
 

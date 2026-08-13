@@ -9,26 +9,90 @@ point of this harness, not an optimization.
 
 ## Model resolution
 
-| Generator | Judge |
-|---|---|
-| Opus 5 | Sonnet 5 (`model: sonnet`) |
-| Sonnet 5 | Opus 5 (`model: opus`) |
-| Haiku | Sonnet 5 (`model: sonnet`) |
-| anything else | Sonnet 5, unless that is the generator |
+**"Generator" means the model that *wrote the questions*, not the session model.** Questions
+are written by Sonnet subagents (see "Batched generation" below), so the main session's model
+is irrelevant to cross-model integrity — what matters is that no gate runs on Sonnet.
 
-Pass the choice explicitly via the Agent tool's `model` parameter. Never let the judge
-default to inheriting the session model — that silently collapses to same-model judging.
+| Role | Model | Why this tier |
+|---|---|---|
+| Generator, and every rewrite | Sonnet 5 (`model: sonnet`) | The largest cost in a run is writing questions, not judging them |
+| Gate 1 — blind cue | Haiku 4.5 (`model: haiku`) | Gate 1 is *forbidden* from using domain knowledge and applies surface-form heuristics only, so capability buys nothing — the cheapest model does this identically |
+| Gates 2+3 — answerability, order | Opus 5 (`model: opus`) | These need real capability, and both run in one agent |
+
+Pass the choice explicitly via the Agent tool's `model` parameter — for generators as well as
+judges. Never let any of them inherit the session model: an inherited generator silently
+becomes whatever the session is (often Opus, the thing this is avoiding), and an inherited
+judge silently collapses to same-model judging.
 
 Do not use Haiku as judge for gate 2: it may fail a hard question for lack of capability,
-which reads as a false question defect.
+which reads as a false question defect. That asymmetry is exactly why gate 1 and gates 2+3
+get different models rather than one shared judge model — gate 1 cannot suffer from it,
+because it is not allowed to reason about the subject at all.
 
-## Judges load nothing
+Cost note, for reasoning about the tiers rather than quoting numbers: at API list rates Opus 5
+is roughly 1.7× Sonnet 5 and 5× Haiku 4.5 per token. Subscription plans weight models
+differently and the weighting isn't published, so treat the ordering as reliable and the
+ratios as approximate.
 
-Every gate prompt below is complete on its own — you have to paste it anyway to interpolate
-the questions and the source. So end each judge prompt with:
+## Batched generation
 
-> Do not invoke the study-question-generator skill and do not read any of its files. This
-> prompt contains everything you need. Return only the JSON.
+Judge spawns are *not* the dominant cost of a run — the generating context is. Writing N
+questions in one conversation means each new question is written with the source, the fact
+inventory, and every question already written in context, so input cost grows roughly
+quadratically in N. A 15-question set written this way ran 45 minutes and consumed most of a
+day's subscription budget, against roughly 80K tokens total for four judge rounds.
+
+So generation is **split into parallel Sonnet subagents of ~5 questions each**, while judging
+stays **pooled over the whole set**:
+
+| | Split | Pooled |
+|---|---|---|
+| Generation, and rewrites | ✅ one subagent per batch of ~5, spawned in parallel | |
+| Gate 1 | | ✅ one agent, all N questions |
+| Gates 2+3 | | ✅ one agent, all N questions, source read once |
+
+Both halves of that matter. Splitting generation removes the quadratic growth and the
+serialization. Keeping judging pooled is what protects the harness: gates 2+3 would otherwise
+re-send the whole source once per batch, and gate 1's set-wide hit-rate check would be
+computed over 5 questions instead of N, which is too small to mean anything.
+
+### Nothing moves except paths
+
+Splitting generation only helps if the material stays split. So every handoff in a run is a
+**file path**, and the orchestrator holds none of the contents:
+
+| Artifact | Written by | The orchestrator holds |
+|---|---|---|
+| `/tmp/source.txt` | `scripts/extract_source.py` | the path and the word count the script printed |
+| `facts.md` — facts pre-grouped under `## Batch 1`, `## Batch 2`… | a **delegated Sonnet subagent**, not the orchestrator | the path, and the totals it reported |
+| `batch1.md`, `batch2.md`, … | one Sonnet generator each, in parallel | the paths, plus each batch's answer key |
+| `questions.md` | `cat batch*.md > questions.md` | the path |
+
+Each generator subagent gets: the **path** to the extracted source, the **name of its `## Batch
+N` heading** in `facts.md`, the writing rules verbatim, and a target answer-position spread for
+its batch. It reads the source and its own fact group itself. Disjoint groups are what stop two
+batches building the same concept; the position targets are what stop the merged set clustering
+on one letter. Cross-batch clustering and parity are then caught free by
+`scripts/check_mechanics.py` on the merged set, which is set-wide already.
+
+The inventory is delegated for the same reason the questions are. A ~45-fact list read into the
+orchestrator is exactly the accumulation this section exists to remove, and grouping belongs
+with the agent that enumerated the facts anyway — it knows which ones chain.
+
+Generator prompts carry the same "load nothing" rule as judge prompts, below — for the same
+reason and at the same cost per spawn.
+
+## Judges and generators load nothing
+
+Every prompt in this file is complete on its own: it carries the task, the JSON shape, and the
+**paths** to whatever the agent must read. The only payload interpolated anywhere is gate 3's
+answer key, which is a list of letters. That makes the rule below matter more rather than less —
+an agent already told to go read two files is more likely to go read a third. So end each judge
+prompt with:
+
+> Read only the files named above. Do not invoke the study-question-generator skill and do not
+> read any of its files — this prompt plus those files are everything you need. Return only the
+> JSON.
 
 Without that line a judge is liable to load `SKILL.md` and `question-anatomy.md` — roughly
 5,600 tokens of *question-generation* rules, on every spawn, for an agent whose only job is to
@@ -37,21 +101,39 @@ exactly what a judge prompt is full of. Worse, a judge that has read the generat
 no longer a naive test-taker: gate 1's whole premise is a reader who knows nothing about how
 the question was built.
 
-## Gate 1 — Blind-cue gate (runs first, non-negotiable)
+Naming the files it *should* read is part of the same rule. A prompt that says "read
+`questions.md`" and stops there leaves the agent to decide what else is relevant; a prompt that
+says which paths to read and that nothing else is needed does not.
+
+**Generator subagents get the same line**, with `question-anatomy.md`'s rules pasted into the
+prompt instead. A generator that loads the skill re-reads the same ~5,600 tokens on every
+batch spawn, which is a large fraction of what batching just saved. Paste the rules; don't
+send the agent to fetch them.
+
+## Gate 1 — Blind-cue gate (non-negotiable)
+
+**Spawn gate 1 and the gate-2/3 agent in the same message, in parallel.** Nothing consumes
+gate 1's output before gates 2 and 3 run — the verdicts are only combined at the consolidated
+verdict below — so running them in sequence buys nothing and roughly doubles judge wall clock.
+Gate 1 is still a *separate agent with no source*; that is what is non-negotiable, not its
+ordering.
 
 Detects the dominant failure: a question answerable from surface form alone.
 
-The judge gets stems and options, **no source material, no answer key**, and is
-forbidden from using domain reasoning. If it still lands on the keyed answer *and* can
-name the cue, the question is broken.
+The judge reads stems and options **from `questions.md`, and nothing else** — no source
+material, no answer key — and is forbidden from using domain reasoning. If it still lands on
+the keyed answer *and* can name the cue, the question is broken.
 
 **Separate agent, no source access.** An agent that has read the source cannot
-credibly perform this pass.
+credibly perform this pass. `questions.md` carries no answers (`--assert-no-answers` gates
+that before delivery, SKILL.md step 6), so handing over the path is not handing over the key.
 
 ```
-You are taking a multiple-choice exam. You have NO access to any source material,
-textbook, or notes, and you must NOT use subject-matter knowledge to reason about the
-content.
+You are taking a multiple-choice exam. Read the questions from questions.md.
+
+That file is the ONLY thing you may read. Do not read /tmp/source.txt, facts.md, or any
+other file: you have NO access to any source material, textbook, or notes, and you must
+NOT use subject-matter knowledge to reason about the content.
 
 Answer using ONLY test-taking heuristics based on the SURFACE FORM of the text:
 option length, grammatical parallelism, how much detail an option gives, whether an
@@ -68,8 +150,6 @@ actually derived from knowledge.
 
 For each question: state your guess and name the specific surface cue that led you
 there, or "none" if you were genuinely guessing at random.
-
-{questions with options, no answers}
 
 Return one JSON array and no prose:
 [{"question_id": 1, "blind_guess": "C", "cue_used": "longest option; only one with a
@@ -115,14 +195,10 @@ passage is what separates "the question is broken" from "the judge slipped" — 
 unsupported answer means the question isn't grounded.
 
 ```
-You are answering exam questions using ONLY the source material provided. Do not use
-outside knowledge. If the source does not support an answer, say so explicitly.
+Read the source material from /tmp/source.txt and the questions from questions.md.
 
-SOURCE MATERIAL:
-{extracted text}
-
-QUESTIONS:
-{questions with options, no answers}
+You are answering those questions using ONLY that source material. Do not use outside
+knowledge. If the source does not support an answer, say so explicitly.
 
 For each question:
 1. Choose the single best answer.
@@ -155,13 +231,18 @@ Target ≥90% of items passing. Below that, the *generation* is at fault, not th
 
 Confirms the questions are genuinely third-order rather than recall in vignette clothing.
 
-**Run this in the gate-2 agent, as a second turn.** It already has the source loaded, so a
-fresh agent would re-send the whole source for no gain in independence — both gates are
-sourced passes, and neither is the blind pass whose isolation matters. Spawning separately is
-allowed but costs a spawn and a second copy of the source every round.
+**Run this in the gate-2 agent, as a second turn.** It has already read both files, so a fresh
+agent would re-read the whole source for no gain in independence — both gates are sourced
+passes, and neither is the blind pass whose isolation matters. Spawning separately is allowed
+but costs a spawn and a second copy of the source every round.
+
+The **answer key is the one thing this prompt interpolates**, because `questions.md` doesn't
+contain it and must not: it is the student-facing file, and `--assert-no-answers` fails if an
+answer reaches it. A key is a list of letters, so passing it inline costs nothing.
 
 ```
-Audit each question for cognitive order, using this rubric:
+Audit each question in questions.md — which you have already read, along with the source
+at /tmp/source.txt — for cognitive order, using this rubric:
 
 - First order: one fact retrieved from the source.
 - Second order: the stem states a relationship; the student applies it once.
@@ -179,11 +260,7 @@ For each question:
 5. Is each distractor a true statement drawn from the source? List any that are
    absurd, absolute, or invented.
 
-SOURCE MATERIAL:
-{extracted text}
-
-QUESTIONS (with answer key):
-{questions and key}
+ANSWER KEY: {Q1: C, Q2: A, …}
 
 Return one JSON array and no prose:
 [{"question_id": 1, "hop_count": 3, "order": 3, "answer_in_stem": false,
@@ -238,7 +315,13 @@ One row per question:
      Usually the trigger detail is too oblique: a mushroom "gathered at the base of an oak"
      with coagulopathy requires clinical toxicology the source never states. Name the thing
      the source itself names ("identified as a death cap") and let the hops run from there.
-3. Re-run **all three gates** on rewrites — but **only on the rewritten questions**. A rewrite
+3. Rewrites go to **Sonnet generator subagents, one per failing question, in parallel** — not
+   into the main session. Each gets the path to `questions.md`, the question number, the source
+   path, and the judge's failure reason verbatim, and **edits that question in place**; the
+   orchestrator holds numbers and reasons, never question text. Doing it in the orchestrator
+   drags the whole set back into an expensive context, which is what batching exists to prevent.
+   Keeping rewrites on Sonnet is also what keeps Opus a genuine cross-model judge for gates 2+3.
+4. Re-run **all three gates** on rewrites — but **only on the rewritten questions**. A rewrite
    is a new question, not a patch; fixing length parity can easily introduce a second
    defensible answer. A question that passed is finished: re-judging it cannot improve it and
    costs the same as judging it the first time. See "Scoping the rewrite loop" below.
@@ -258,7 +341,7 @@ One row per question:
    question you touched. When an option is unavoidably the longest because its
    category word just *is* longer (`Interfering` vs `Ribosomal`), lengthen a distractor
    rather than mangling the answer.
-4. Cap at 3 rewrite rounds per question — **count the rounds, out loud, per question.** This
+5. Cap at 3 rewrite rounds per question — **count the rounds, out loud, per question.** This
    cap has been documented since the first version of this file and was still exceeded in a
    real build: one question was flagged by gate 2 in rounds 1, 2, 4, 5, 6 and 7 — seven rounds
    under a three-round cap, because nobody was counting. Beyond the cap, **replace the concept
@@ -271,9 +354,10 @@ One row per question:
 
 ## Scoping the rewrite loop
 
-Judge spawns are the entire cost of this harness. A student on a metered plan ran this skill
-twice and spent ~20% of a weekly limit — not because the gates are expensive to *pass*, but
-because the loop re-judged work that was already done.
+Judge spawns are the entire cost *of this harness* — though not of a run as a whole, which the
+generating context dominates (see "Batched generation"). A student on a metered plan ran this
+skill twice and spent ~20% of a weekly limit — not because the gates are expensive to *pass*,
+but because the loop re-judged work that was already done.
 
 Measured from two real builds: a 5-question set consumed **~24 judge spawns**, and a
 10-question set delivered **40 question-judgments to resolve one failing question**. Every one
@@ -291,9 +375,14 @@ is *why each rule exists*, which is what makes them hold up under pressure:
 3. **Count rewrite rounds per question and stop at 3** (see "Handling failures" item 4).
 4. **Gate 3 runs in the gate-2 agent** — a fresh agent would re-send the whole source for no
    gain in independence.
-5. **`check_mechanics.py` must exit 0 before any judge is spawned.** Length parity, absolutes,
-   reasoning words, stem echo and answer-position clustering are all free there and cost a
-   full round to find here.
+5. **`check_mechanics.py` must exit 0 before any judge is spawned, and run it with
+   `--source`.** Length parity, absolutes, reasoning words, stem echo, answer-position
+   clustering and **option-vocabulary grounding** are all free there and cost a full round to
+   find here. Grounding is the one worth naming: without `--source`, an option that renames a
+   source concept reaches gate 2 and comes back `source_sufficient: false`, and those are the
+   rewrites that collapse hop count and burn the 3-round cap (see "Handling failures" item 2).
+6. **Rewrite in parallel Sonnet subagents, one per failing question** — not in the
+   orchestrator, which would pull the whole set back into an expensive context.
 
 **What this trades away, stated plainly.** After round 1, gate 1 no longer recomputes a
 set-wide blind hit rate, so a *systemic* tell introduced by a late rewrite is caught by
@@ -337,7 +426,17 @@ The only difference is who runs them:
 - **"Scoping the rewrite loop" applies here too**, and matters more: reasoning passes in one
   context re-read the source and the whole question set every round. Round 1 covers the full
   set, rounds 2+ only the failures, a clean round ends the loop, cap 3 rounds per question, and
-  `check_mechanics.py` runs first if a shell is available.
+  `check_mechanics.py` runs first if a shell is available — with `--source`, which matters more
+  here too, since there is no cheap judge to fall back on.
+- **Batched generation does not apply** — there are no subagents to batch into. Write the
+  questions in this one context, and expect the cost this section's whole preamble is about.
+  Keeping N small is the only lever available on this surface.
+- **The gate prompts' "read `questions.md`" / "read `/tmp/source.txt`" instructions collapse
+  back to reading them yourself.** File paths exist to keep material out of an expensive
+  context; here there is only one context and it already holds everything, so there is nothing
+  to keep out. If the surface has no shell either, the source is whatever you read from the
+  uploaded file — and `check_mechanics.py` can't run, so every check it would have made for
+  free is back on you.
 
 Every deliverable produced under this fallback must say so (see SKILL.md step 6) — never
 report fallback results as if the cross-model harness ran.
@@ -345,13 +444,22 @@ report fallback results as if the cross-model harness ran.
 ## Reporting to the user
 
 State plainly:
-- generator model, judge model (or "same-model fallback" if no cross-model subagent was
-  available), N requested vs N passing
+- generator model, gate-1 model, gate-2/3 model (or "same-model fallback" if no cross-model
+  subagent was available), N requested vs N passing
 - per-gate results, blind hit rate vs chance
 - any question that failed 3 rounds and why
-- **judge spawns used, and rewrite rounds per question.** Two spawns per round is the target;
-  a run that used many more is a bug in the loop, not thoroughness. Reporting it is what keeps
-  the cost honest and visible to a user on a metered plan.
+- **spawns used, by kind, and rewrite rounds per question.** Through round 1, expect **1
+  inventory + `ceil(N/5)` generators + 2 judges**, plus one Sonnet spawn each time the
+  mechanical screen names something to fix. Then 2 judge spawns and one generator spawn per
+  failing question per rewrite round, and one final Sonnet spawn to assemble `answers.md`. A run
+  that used many more is a bug in the loop, not thoroughness. Reporting it is what keeps the
+  cost honest and visible to a user on a metered plan.
+- whether the main session ever held **the source text, the fact list, or the question set** in
+  working context. It should have held none of the three: the source stays in `/tmp/source.txt`,
+  the facts in `facts.md`, the questions in `batchN.md`/`questions.md`, and the orchestrator
+  moves paths, JSON verdicts and exit codes. If it read one of those files, or started
+  rewriting questions itself, that is the expensive failure mode returning — say so, because
+  the token count will show it and the cause won't be obvious otherwise.
 - if fewer than N survived, say so rather than padding with recall questions
 - if the same-model fallback ran, say so explicitly and note that pass results are
   provisional, not equivalent to a cross-model verdict
