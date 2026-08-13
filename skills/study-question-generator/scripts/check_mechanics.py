@@ -9,6 +9,10 @@ Judgment-dependent checks (hop count, whether a distractor is a true source
 fact, whether two options are both defensible) still require the judge gates in
 references/judge-protocol.md. This script does not replace them.
 
+Length checks are skipped on enumerated-label sets (see MIN_LENGTH_FOR_RATIO) —
+a ratio computed over 3- and 4-character acronyms is noise, and flagging it
+trains readers to ignore the whole script. Skips are printed, never silent.
+
 Usage:
     check_mechanics.py questions.md --key C,B,B,D,C
     check_mechanics.py questions.md --key key.json
@@ -40,6 +44,12 @@ ABSOLUTES = re.compile(
 OPTION_LINE = re.compile(r"^\s*([A-J])[.)]\s+(.+?)\s*$", re.M)
 
 MAX_LENGTH_RATIO = 1.35
+# Below this, a length ratio is noise. The best option sets are enumerated labels
+# (BER/MMR/HR/NER, TFIID…TFIIH) where BER vs NHEJ is a "1.33 ratio" that no
+# test-taker can act on — and question-anatomy.md recommends exactly those sets.
+# Flagging them trained readers to ignore this script, which is how real defects
+# ended up costing judge rounds.
+MIN_LENGTH_FOR_RATIO = 12
 
 
 def parse_key(spec: str, n_questions: int) -> dict[int, str]:
@@ -100,7 +110,17 @@ def main() -> None:
             problems.append(f"only {len(opts)} options")
 
         ratio = max(lengths) / min(lengths)
-        if ratio > args.max_ratio:
+        # Short enumerated labels carry no actionable length cue — see
+        # MIN_LENGTH_FOR_RATIO. Say so rather than staying silent, or a skipped
+        # check reads as a passed one.
+        ratio_meaningful = max(lengths) > MIN_LENGTH_FOR_RATIO
+        notes: list[str] = []
+        if not ratio_meaningful:
+            notes.append(
+                f"length checks skipped: longest option is {max(lengths)} chars "
+                f"(≤{MIN_LENGTH_FOR_RATIO}), an enumerated-label set"
+            )
+        elif ratio > args.max_ratio:
             problems.append(
                 f"length ratio {ratio:.2f} > {args.max_ratio} "
                 f"(longest {max(lengths)}, shortest {min(lengths)} chars)"
@@ -117,7 +137,11 @@ def main() -> None:
         elif correct not in by_letter:
             problems.append(f"key says {correct} but no such option")
         else:
-            if len(by_letter[correct]) == max(lengths) and ratio > 1.05:
+            if (
+                ratio_meaningful
+                and len(by_letter[correct]) == max(lengths)
+                and ratio > 1.05
+            ):
                 problems.append(f"correct option {correct} is the longest")
             # A distinctive content word from the answer showing up in the stem
             # usually means the stem gave the game away.
@@ -136,6 +160,8 @@ def main() -> None:
                 print(f"    - {p}")
         else:
             print(f"{label}: ok  (n={len(opts)} ratio={ratio:.2f} key={correct})")
+        for note in notes:
+            print(f"    note: {note}")
 
     # Set-wide: correct answers should not cluster in one position.
     spread = Counter(key[i] for i in sorted(key) if i <= len(questions))

@@ -79,6 +79,16 @@ Then pre-screen mechanically before spending judge tokens:
 python3 scripts/check_mechanics.py questions.md --key C,A,D,B,C
 ```
 
+**This is a gate, not a report.** It exits non-zero on failure — fix what it names and re-run
+until it exits 0 *before* spawning any judge. A judge round costs thousands of tokens to find
+what this finds in milliseconds for free. Re-run it on the **whole set** after every edit,
+including every rewrite round in step 5: it re-checks parity, absolutes and answer-position
+clustering across all questions, which is what keeps the scoped re-judging in step 5 safe.
+
+It skips length checks on enumerated-label sets (all options ≤12 chars) and prints a note
+saying so — a ratio over 3-character acronyms is noise. Semantic echo and hop count are
+invisible to it; that is what the judge is for.
+
 ### 5. Validate — required
 
 **Check first whether the Agent tool can spawn a subagent on a specific model.** In
@@ -96,16 +106,31 @@ Read `references/judge-protocol.md` and run all three gates via subagents on a
 Sonnet generating → judge with Opus; pass `model` explicitly to the Agent tool).
 
 1. **Blind-cue gate** — judge sees questions with *no source*, uses only test-taking
-   heuristics. Hitting the key with a named cue = FAIL, rewrite. Runs first.
+   heuristics. FAIL only when the blind guess **matches the key** *and* a real surface cue is
+   named. A named cue on a *wrong* guess is a PASS — do not rewrite it. Runs first.
 2. **Answerability gate** — separate agent, *with* source, must pick the keyed answer,
    reconstruct the chain, and quote the source.
-3. **Order audit** — hop count ≥3, answer absent from stem, distractors clean.
+3. **Order audit** — hop count ≥3, answer absent from stem, distractors clean. Run this in
+   the **same agent as gate 2**, which already has the source loaded.
 
 Gates 1 and 2 must be **separate agents**: one that has read the source cannot do a
-credible blind pass.
+credible blind pass. Gate 3 sharing gate 2's agent is fine — both are sourced passes.
 
-Rewrite failures and re-run all three gates on them. Cap at 3 rounds per question, then
-report it unresolved.
+**The rewrite loop — two agents per round, and it stops.** Judge rounds are the entire cost
+of this skill; a set that costs 24 spawns instead of 4 is not more validated, just slower and
+more expensive.
+
+- **Round 1 judges the full set.** Gate 1's set-wide hit-rate-vs-chance check needs every
+  question.
+- **Rounds 2+ judge only the questions that failed.** Never re-judge a question that passed.
+  Run `check_mechanics.py` on the whole set after every edit instead — it covers parity,
+  absolutes and answer-position clustering set-wide, for free.
+- **Stop as soon as a round comes back clean.** No confirmation round.
+- **Cap at 3 rewrite rounds per question.** At the cap, replace the concept or report the
+  question unresolved — never silently drop it.
+
+Pass `references/judge-protocol.md`'s prompts to the judge verbatim; they are self-contained,
+so tell each judge **not** to load this skill or its reference files.
 
 ### 6. Deliver
 
@@ -154,7 +179,13 @@ requested vs N passing, blind hit rate vs chance, and anything unresolved.
 | Wrote the stem before the chain | Chain first, vignette backwards from it |
 | Source too thin for N | Cap N and say so; never pad with recall questions |
 | "Questions look good, skip the judge" | Run all three gates. Not optional |
-| Judge inherits the session model, or one agent runs both the blind and sourced gates | Pass `model` explicitly; use separate agents |
+| Re-judging the whole set to fix one question | Round 1 is full-set; after that judge only the failures. Ten questions re-judged for one failure is the single biggest waste in this skill |
+| Another round after a clean one, "to confirm" | Stop. A clean round is the exit condition |
+| A question is on its 4th rewrite round | Cap is 3. Replace the concept or report it unresolved |
+| Rewriting a question because the blind judge named a cue, though its guess was wrong | That's a PASS. Rewriting it makes the question worse for nothing |
+| Judge spawned without being told to skip the skill | It will load generation rules it never uses. The gate prompts are self-contained |
+| Judge gates run before `check_mechanics.py` exits 0 | Free checks first. Never spend judge tokens on parity or clustering |
+| Judge inherits the session model, or one agent runs **gate 1 and gate 2** | Pass `model` explicitly. Gate 1 must be its own agent; gates 2 and 3 share one by design |
 | Failures quietly dropped so the set looks clean | Report pass rate and every failure |
 | Answer key states a chain with no citation | Cite the slide/page and quote the source per hop — Gate 2 produced those quotes already |
 | A gate failure is mentioned only in chat | Mark it in the key too; the student reads the file, not the transcript |

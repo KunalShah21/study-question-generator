@@ -22,6 +22,21 @@ default to inheriting the session model — that silently collapses to same-mode
 Do not use Haiku as judge for gate 2: it may fail a hard question for lack of capability,
 which reads as a false question defect.
 
+## Judges load nothing
+
+Every gate prompt below is complete on its own — you have to paste it anyway to interpolate
+the questions and the source. So end each judge prompt with:
+
+> Do not invoke the study-question-generator skill and do not read any of its files. This
+> prompt contains everything you need. Return only the JSON.
+
+Without that line a judge is liable to load `SKILL.md` and `question-anatomy.md` — roughly
+5,600 tokens of *question-generation* rules, on every spawn, for an agent whose only job is to
+answer or audit. This skill's `description` triggers on the phrase "exam questions," which is
+exactly what a judge prompt is full of. Worse, a judge that has read the generation rules is
+no longer a naive test-taker: gate 1's whole premise is a reader who knows nothing about how
+the question was built.
+
 ## Gate 1 — Blind-cue gate (runs first, non-negotiable)
 
 Detects the dominant failure: a question answerable from surface form alone.
@@ -67,6 +82,14 @@ cue. *"The 5' cap and poly-A tail are added separately from splicing"* is biolog
 surface cue — rewriting to defeat it makes the question worse. Discount any cue a reader
 with zero subject knowledge could not have seen, and count that question as a pass.
 
+**A failure needs both conditions: the guess matches the key *and* a real cue is named.**
+Neither alone is a defect. A named cue on a *wrong* guess is a pass — the judge described a
+surface feature that did not in fact lead anywhere. This is not a corner case: one real round
+of this harness named cues on 8 of 10 questions ("longest option", "only one containing a
+digit", "only two-word option") while **only one** of those guesses matched the key. Rewriting
+the other seven would have burned seven rounds and made the questions worse. Score the pairing,
+not the cue list.
+
 **Scoring.** With *k* options, random guessing yields ≈1/*k*.
 
 | Result | Verdict |
@@ -77,7 +100,9 @@ with zero subject knowledge could not have seen, and count that question as a pa
 | Set-wide hit rate ≫ 1/*k* | **FAIL the set** — systemic tell, likely length parity or position clustering |
 
 Also fail the set if correct answers cluster in one position, even when individual
-questions pass.
+questions pass. On rewrite rounds this set-wide check is carried by
+`scripts/check_mechanics.py`, which computes position clustering for free — see
+"Scoping the rewrite loop" below.
 
 ## Gate 2 — Answerability gate
 
@@ -128,7 +153,11 @@ Target ≥90% of items passing. Below that, the *generation* is at fault, not th
 ## Gate 3 — Order and grounding audit
 
 Confirms the questions are genuinely third-order rather than recall in vignette clothing.
-May reuse the gate-2 agent, which already has the source loaded.
+
+**Run this in the gate-2 agent, as a second turn.** It already has the source loaded, so a
+fresh agent would re-send the whole source for no gain in independence — both gates are
+sourced passes, and neither is the blind pass whose isolation matters. Spawning separately is
+allowed but costs a spawn and a second copy of the source every round.
 
 ```
 Audit each question for cognitive order, using this rubric:
@@ -197,8 +226,10 @@ One row per question:
      Usually the trigger detail is too oblique: a mushroom "gathered at the base of an oak"
      with coagulopathy requires clinical toxicology the source never states. Name the thing
      the source itself names ("identified as a death cap") and let the hops run from there.
-3. Re-run **all three gates** on rewrites. A rewrite is a new question, not a patch;
-   fixing length parity can easily introduce a second defensible answer.
+3. Re-run **all three gates** on rewrites — but **only on the rewritten questions**. A rewrite
+   is a new question, not a patch; fixing length parity can easily introduce a second
+   defensible answer. A question that passed is finished: re-judging it cannot improve it and
+   costs the same as judging it the first time. See "Scoping the rewrite loop" below.
 
    *Hop count collapsed after regrounding* → the vocabulary step you removed **was** a hop.
    A question asking which transcript class a death-cap-poisoned polymerase stops making ran
@@ -215,13 +246,59 @@ One row per question:
    question you touched. When an option is unavoidably the longest because its
    category word just *is* longer (`Interfering` vs `Ribosomal`), lengthen a distractor
    rather than mangling the answer.
-4. Cap at 3 rewrite rounds per question. Beyond that, **replace the concept rather than
-   patching the question** — or report it unresolved. Some option sets carry a defect no
+4. Cap at 3 rewrite rounds per question — **count the rounds, out loud, per question.** This
+   cap has been documented since the first version of this file and was still exceeded in a
+   real build: one question was flagged by gate 2 in rounds 1, 2, 4, 5, 6 and 7 — seven rounds
+   under a three-round cap, because nobody was counting. Beyond the cap, **replace the concept
+   rather than patching the question** — or report it unresolved. Some option sets carry a defect no
    wording fixes: the five parts of a mature transcript contain two natural pairs (two
    termini, two UTRs), which leaves the coding sequence permanently the odd one out, and a
    blind judge said so. Two questions in this build hit the cap and were rewritten onto
    different concepts with enumerable option sets; both then scored a 1.00 length ratio.
    Grinding a fourth round on a structurally cued set wastes tokens.
+
+## Scoping the rewrite loop
+
+Judge spawns are the entire cost of this harness. A student on a metered plan ran this skill
+twice and spent ~20% of a weekly limit — not because the gates are expensive to *pass*, but
+because the loop re-judged work that was already done.
+
+Measured from two real builds: a 5-question set consumed **~24 judge spawns**, and a
+10-question set delivered **40 question-judgments to resolve one failing question**. Every one
+of those extra judgments returned the same verdict as the round before it.
+
+**The loop:**
+
+| Round | What gets judged | Cost |
+|---|---|---|
+| 1 | The full set — gate 1's set-wide hit-rate check needs it | 2 spawns (gate 1; gate 2+3 share one) |
+| 2+ | **Only the questions that failed** | 2 spawns, tiny payload |
+| after every edit | `scripts/check_mechanics.py` on the **whole set** | free |
+| a round comes back clean | **stop** | — |
+
+Rules, in order of how much they save:
+
+1. **Never re-judge a passing question.** Rounds 2+ carry only the rewritten questions. If one
+   question of ten failed, judge one question.
+2. **A clean round ends the loop.** Do not run a confirmation round. In one build, gate 1 ran
+   three further full-set rounds after the last real failure was fixed; all three returned no
+   cues on any question. That is three rounds of pure spend.
+3. **Count rewrite rounds per question and stop at 3** (see "Handling failures" item 4).
+4. **Gate 3 runs in the gate-2 agent** — one sourced agent per round, not two.
+5. **`check_mechanics.py` runs first and must exit 0** before any judge is spawned. It costs
+   nothing and catches length parity, absolutes, reasoning words, stem echo and answer-position
+   clustering. Judge tokens spent on those is money burned.
+
+**What this trades away, stated plainly.** After round 1, gate 1 no longer recomputes a
+set-wide blind hit rate, so a *systemic* tell introduced by a late rewrite is caught by
+`check_mechanics.py` (clustering, parity, absolutes) but not by a fresh blind pass over the
+whole set. If a build needed many rewrite rounds and you have reason to think the set drifted
+as a whole, one final full-set gate 1 is a defensible spend — but it is a deliberate choice,
+not the default.
+
+What does **not** change: all three gates still run on every question, gates 1 and 2 stay
+separate agents on a different model than the generator, and every PASS condition in the
+consolidated verdict above still holds. Nothing here makes a question easier to pass.
 
 ## Same-model fallback (only when a cross-model subagent isn't available)
 
@@ -251,6 +328,10 @@ The only difference is who runs them:
 - This fallback cannot catch what cross-model judging exists to catch: a model's fluency
   at reconstructing its own reasoning, mistaken for the question being sound. Treat every
   PASS here as provisional.
+- **"Scoping the rewrite loop" applies here too**, and matters more: reasoning passes in one
+  context re-read the source and the whole question set every round. Round 1 covers the full
+  set, rounds 2+ only the failures, a clean round ends the loop, cap 3 rounds per question, and
+  `check_mechanics.py` runs first if a shell is available.
 
 Every deliverable produced under this fallback must say so (see SKILL.md step 6) — never
 report fallback results as if the cross-model harness ran.
@@ -262,6 +343,9 @@ State plainly:
   available), N requested vs N passing
 - per-gate results, blind hit rate vs chance
 - any question that failed 3 rounds and why
+- **judge spawns used, and rewrite rounds per question.** Two spawns per round is the target;
+  a run that used many more is a bug in the loop, not thoroughness. Reporting it is what keeps
+  the cost honest and visible to a user on a metered plan.
 - if fewer than N survived, say so rather than padding with recall questions
 - if the same-model fallback ran, say so explicitly and note that pass results are
   provisional, not equivalent to a cross-model verdict

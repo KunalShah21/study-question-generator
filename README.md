@@ -113,14 +113,25 @@ capability gap there reads as a false question defect.
    true source fact, option length parity.
 
 Gates 1 and 2 must be different agents: one that has read the source cannot perform a
-credible blind pass.
+credible blind pass. Gate 3 runs as a second turn in the gate-2 agent, which already has the
+source loaded — two spawns per round, not three.
+
+**Cost.** Judge spawns are what this skill spends, so the loop is scoped: round 1 judges the
+full set, later rounds judge only the questions that failed, a clean round ends the loop, and
+each question is capped at 3 rewrite rounds. The free `check_mechanics.py` screen has to pass
+before any judge is spawned, and it re-checks the whole set — parity, absolutes, answer-position
+clustering — after every edit. Each run reports the spawns it used.
 
 One caveat the protocol is explicit about: a frontier model cannot fully suppress what it
 knows, so the blind judge will sometimes answer from domain knowledge and back-fill a
 plausible-sounding "cue." Only treat a cue as real if a reader with zero subject knowledge
 could have seen it — the judge is asked to report `used_domain_knowledge` for that reason.
-Failures get up to 3 rewrite-and-regate rounds before being reported unresolved rather than
-silently dropped.
+
+A cue on its own is also not a failure: the guess has to actually **land on the keyed answer**.
+In one real run the blind judge named a surface cue on 8 of 10 questions — "longest option",
+"only one containing a digit" — and only one of those guesses was right. The other seven were
+cues that led nowhere, and rewriting those questions would have made them worse. Failures get up
+to 3 rewrite-and-regate rounds before being reported unresolved rather than silently dropped.
 
 ## Output & citations
 
