@@ -242,13 +242,6 @@ if [ "${NEEDS_INSTALL:-1}" -eq 1 ]; then
     else
         step "Copying the skill to $DEST"
         run cp -R "$SRC" "$DEST"
-        # check_mechanics.py ships 644 while its siblings ship 755, though all
-        # three carry a #!/usr/bin/env python3 line. Normalize what we installed.
-        if [ "$DRY_RUN" -eq 1 ]; then
-            printf '   [dry-run] chmod 755 %s/scripts/*.py\n' "$DEST"
-        else
-            chmod 755 "$DEST"/scripts/*.py
-        fi
     fi
 fi
 

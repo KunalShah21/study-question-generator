@@ -149,13 +149,10 @@ codes, named sites. When a source offers one, the whole class of surface-cue def
 disappears at once, and the question rests entirely on the fact chain. Prose options are
 harder to make safe; use them when no enumerable set fits the concept.
 
-One consequence for the mechanical screen: short opaque labels break `check_mechanics.py`'s
-length ratio. `CSB` (3) beside `TFIIH` (5) is a 1.67 ratio and `Mdm2` (4) beside `ATM` (3) is
-2.00 — both flagged, both fine, because a one- or two-character difference in an abbreviation
-carries no signal a reader could use. On abbreviation-heavy sets pass `--max-ratio 2.6` and
-judge the "correct option is longest" warning by eye: it matters for prose options, not for a
-five-character label. Never pad or truncate a source-verbatim name to satisfy the checker —
-that breaks grounding to fix nothing.
+`check_mechanics.py` skips length checks entirely on these sets and says so, because a ratio
+over 3- and 4-character acronyms is noise: `CSB` beside `TFIIH` computes to 1.67 and carries
+no signal a reader could act on. Never pad or truncate a source-verbatim name to satisfy the
+checker — that breaks grounding to fix nothing.
 
 ### Name options in the source's own words
 
@@ -274,7 +271,8 @@ judge to report `used_domain_knowledge` explicitly for exactly this reason.
 - [ ] Fact chain written out; **≥3 hops**
 - [ ] Every fact traceable to the source (no outside knowledge required)
 - [ ] Answer term and its category absent from the stem
-- [ ] Cover the options: is the stem still answerable? (If yes, the options leak.)
+- [ ] Cover the options: could a reader who knows the source still produce the answer?
+      (If no, the option list is carrying the question.)
 - [ ] Every distractor true-but-wrong-step, none absurd, none absolute
 - [ ] All options from one closed source category, identical grammatical form
 - [ ] Each option named in the **source's own vocabulary**, not a synonym for it

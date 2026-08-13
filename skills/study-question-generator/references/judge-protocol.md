@@ -101,8 +101,9 @@ not the cue list.
 
 Also fail the set if correct answers cluster in one position, even when individual
 questions pass. On rewrite rounds this set-wide check is carried by
-`scripts/check_mechanics.py`, which computes position clustering for free — see
-"Scoping the rewrite loop" below.
+`scripts/check_mechanics.py`, which flags any letter holding more than about
+`n / k + 1` of the answers — chance plus one — for free. See "Scoping the rewrite loop"
+below.
 
 ## Gate 2 — Answerability gate
 
@@ -172,11 +173,11 @@ For each question:
    applied).
 2. Assign order: 1, 2, or 3.
 3. Does the answer term or its category appear in the stem? (yes/no)
-4. Is the stem still answerable with the options covered? (yes = options leak)
+4. Cover the options and read the stem alone. Could a reader who knows this
+   source produce the keyed answer without seeing the option list? (no = the
+   options are carrying the question)
 5. Is each distractor a true statement drawn from the source? List any that are
    absurd, absolute, or invented.
-6. Does length parity hold — longest option ≤1.3x the shortest? Any option
-   containing "because"/"since"/"due to"?
 
 SOURCE MATERIAL:
 {extracted text}
@@ -186,12 +187,22 @@ QUESTIONS (with answer key):
 
 Return one JSON array and no prose:
 [{"question_id": 1, "hop_count": 3, "order": 3, "answer_in_stem": false,
-  "answerable_without_options": true, "bad_distractors": [], "parity_ok": true,
-  "notes": ""}]
+  "answerable_from_stem_alone": true, "bad_distractors": [], "notes": ""}]
 ```
 
 Fail any question with `order < 3`, `answer_in_stem: true`,
-`answerable_without_options: false`, non-empty `bad_distractors`, or `parity_ok: false`.
+`answerable_from_stem_alone: false`, or non-empty `bad_distractors`.
+
+Item 4 runs in that direction on purpose: a well-posed question is answerable from the stem
+alone, and the options only offer somewhere to put the answer. Inverted, it fails good
+questions — *"which polymerase synthesizes rRNA?"* is answerable with the options covered and
+leaks nothing.
+
+**Parity and reasoning words are deliberately absent from this prompt.**
+`check_mechanics.py` gates both, free, and must exit 0 first, so re-asking here can only
+manufacture false failures — a 1.32 set clears the script's 1.35 but fails a judge told
+"1.3", and an enumerated-label set the script skips (`CSB` vs `TFIIH` = 1.67) reads as a
+parity defect. Each one costs a rewrite round to discover the tooling disagreed with itself.
 
 ## Consolidated verdict
 
@@ -207,7 +218,8 @@ One row per question:
 - gate 1 did not identify the key via a named cue
 - gate 2's answer matches the key, with a sound chain and real quotes
 - gate 2 found no other defensible option and needed no outside knowledge
-- gate 3 reports order 3, answer absent from stem, clean distractors, parity OK
+- gate 3 reports order 3, answer absent from stem, answerable from the stem alone, and
+  clean distractors (parity is already gated by `check_mechanics.py`)
 
 ## Handling failures
 
@@ -267,27 +279,21 @@ Measured from two real builds: a 5-question set consumed **~24 judge spawns**, a
 10-question set delivered **40 question-judgments to resolve one failing question**. Every one
 of those extra judgments returned the same verdict as the round before it.
 
-**The loop:**
+**SKILL.md step 5 has the loop table** — round 1 full set, rounds 2+ failures only,
+`check_mechanics.py` free after every edit, a clean round stops. What that table can't carry
+is *why each rule exists*, which is what makes them hold up under pressure:
 
-| Round | What gets judged | Cost |
-|---|---|---|
-| 1 | The full set — gate 1's set-wide hit-rate check needs it | 2 spawns (gate 1; gate 2+3 share one) |
-| 2+ | **Only the questions that failed** | 2 spawns, tiny payload |
-| after every edit | `scripts/check_mechanics.py` on the **whole set** | free |
-| a round comes back clean | **stop** | — |
-
-Rules, in order of how much they save:
-
-1. **Never re-judge a passing question.** Rounds 2+ carry only the rewritten questions. If one
-   question of ten failed, judge one question.
-2. **A clean round ends the loop.** Do not run a confirmation round. In one build, gate 1 ran
-   three further full-set rounds after the last real failure was fixed; all three returned no
-   cues on any question. That is three rounds of pure spend.
+1. **Never re-judge a passing question.** Re-judging cannot improve it and costs exactly what
+   judging it the first time cost. If one question of ten failed, judge one question.
+2. **A clean round ends the loop.** In one build, gate 1 ran three further full-set rounds
+   after the last real failure was fixed; all three returned no cues on any question. Three
+   rounds of pure spend, bought by wanting confirmation.
 3. **Count rewrite rounds per question and stop at 3** (see "Handling failures" item 4).
-4. **Gate 3 runs in the gate-2 agent** — one sourced agent per round, not two.
-5. **`check_mechanics.py` runs first and must exit 0** before any judge is spawned. It costs
-   nothing and catches length parity, absolutes, reasoning words, stem echo and answer-position
-   clustering. Judge tokens spent on those is money burned.
+4. **Gate 3 runs in the gate-2 agent** — a fresh agent would re-send the whole source for no
+   gain in independence.
+5. **`check_mechanics.py` must exit 0 before any judge is spawned.** Length parity, absolutes,
+   reasoning words, stem echo and answer-position clustering are all free there and cost a
+   full round to find here.
 
 **What this trades away, stated plainly.** After round 1, gate 1 no longer recomputes a
 set-wide blind hit rate, so a *systemic* tell introduced by a late rewrite is caught by

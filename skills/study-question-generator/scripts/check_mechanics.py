@@ -13,6 +13,9 @@ Length checks are skipped on enumerated-label sets (see MIN_LENGTH_FOR_RATIO) �
 a ratio computed over 3- and 4-character acronyms is noise, and flagging it
 trains readers to ignore the whole script. Skips are printed, never silent.
 
+Options may be written "A. text", "A) text", or bulleted "- A. text"; the
+grammar matches render_output.py's so a file that renders also checks.
+
 Usage:
     check_mechanics.py questions.md --key C,B,B,D,C
     check_mechanics.py questions.md --key key.json
@@ -41,7 +44,10 @@ ABSOLUTES = re.compile(
     r"interchangeable|nothing)\b",
     re.I,
 )
-OPTION_LINE = re.compile(r"^\s*([A-J])[.)]\s+(.+?)\s*$", re.M)
+# "A. text" / "A) text" / "- A. text". Kept in step with render_output.py's
+# OPTION_RE: a set that renders must also be checkable, or the free screen gets
+# skipped and its defects reach the judge instead.
+OPTION_LINE = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?([A-J])[.)][ \t]+(.+?)[ \t]*$", re.M)
 
 MAX_LENGTH_RATIO = 1.35
 # Below this, a length ratio is noise. The best option sets are enumerated labels
@@ -57,14 +63,19 @@ def parse_key(spec: str, n_questions: int) -> dict[int, str]:
     if path.exists():
         data = json.loads(path.read_text())
         if isinstance(data, dict):
-            return {int(k): v.strip().upper() for k, v in data.items()}
-        return {i: str(v).strip().upper() for i, v in enumerate(data, start=1)}
-    letters = [s.strip().upper() for s in spec.split(",") if s.strip()]
-    if len(letters) != n_questions:
+            key = {int(k): v.strip().upper() for k, v in data.items()}
+        else:
+            key = {i: str(v).strip().upper() for i, v in enumerate(data, start=1)}
+    else:
+        letters = [s.strip().upper() for s in spec.split(",") if s.strip()]
+        key = {i: l for i, l in enumerate(letters, start=1)}
+    # Checked on both paths: a short JSON key would otherwise degrade to a
+    # per-question "no key entry" instead of naming the actual mistake.
+    if len(key) != n_questions:
         raise SystemExit(
-            f"--key has {len(letters)} answers but found {n_questions} questions"
+            f"--key has {len(key)} answers but found {n_questions} questions"
         )
-    return {i: l for i, l in enumerate(letters, start=1)}
+    return key
 
 
 def split_questions(text: str) -> list[tuple[str, str]]:
@@ -83,7 +94,6 @@ def main() -> None:
     ap.add_argument("source", type=Path)
     ap.add_argument("--key", required=True,
                     help="comma list (C,B,B,D,C) or path to a JSON key")
-    ap.add_argument("--max-ratio", type=float, default=MAX_LENGTH_RATIO)
     args = ap.parse_args()
 
     if not args.source.exists():
@@ -95,16 +105,23 @@ def main() -> None:
 
     key = parse_key(args.key, len(questions))
     failures: list[str] = []
+    option_counts: list[int] = []
 
     for i, (heading, body) in enumerate(questions, start=1):
         opts = OPTION_LINE.findall(body)
-        stem = body[: body.index(opts[0][0] + ".")] if opts else body
+        # Slice the stem at where the first option line actually starts. Searching
+        # the body for the letter instead ("A.") crashes on "A)" sets and, worse,
+        # silently truncates the stem at an incidental "hemoglobin A." — hiding
+        # the rest of it from the echo check below.
+        first = OPTION_LINE.search(body)
+        stem = body[: first.start()] if first else body
         by_letter = {l: t for l, t in opts}
         lengths = [len(t) for _, t in opts]
         correct = key.get(i)
 
         label = f"Q{i}"
         problems: list[str] = []
+        option_counts.append(len(opts))
 
         if len(opts) < 3:
             problems.append(f"only {len(opts)} options")
@@ -120,9 +137,9 @@ def main() -> None:
                 f"length checks skipped: longest option is {max(lengths)} chars "
                 f"(≤{MIN_LENGTH_FOR_RATIO}), an enumerated-label set"
             )
-        elif ratio > args.max_ratio:
+        elif ratio > MAX_LENGTH_RATIO:
             problems.append(
-                f"length ratio {ratio:.2f} > {args.max_ratio} "
+                f"length ratio {ratio:.2f} > {MAX_LENGTH_RATIO} "
                 f"(longest {max(lengths)}, shortest {min(lengths)} chars)"
             )
 
@@ -163,15 +180,25 @@ def main() -> None:
         for note in notes:
             print(f"    note: {note}")
 
-    # Set-wide: correct answers should not cluster in one position.
+    # Set-wide: correct answers should not cluster in one position. This check is
+    # load-bearing — after round 1 the judge protocol stops re-running a full-set
+    # blind pass and relies on this to catch clustering introduced by a rewrite.
+    # So threshold against chance (n/k answers per letter), not against half the
+    # set: "> n/2" only fires at 6-of-10, which no real set reaches, and a rule
+    # that never fires is not a substitute for the pass it replaced.
     spread = Counter(key[i] for i in sorted(key) if i <= len(questions))
     n = len(questions)
     print(f"\nanswer positions: {dict(spread)}")
     if n >= 4:
+        # Smallest option count in the set — the most forgiving k, so a spread
+        # that plain guessing would produce anyway is never flagged.
+        k = min(option_counts) if option_counts else 4
+        limit = max(2, n // k + 1)
         worst = spread.most_common(1)[0]
-        if worst[1] > max(2, round(n * 0.5)):
+        if worst[1] > limit:
             failures.append("set")
-            print(f"SET FAIL: '{worst[0]}' holds {worst[1]} of {n} answers — "
+            print(f"SET FAIL: '{worst[0]}' holds {worst[1]} of {n} answers "
+                  f"(chance is ~{n / k:.1f} across {k} options) — "
                   "redistribute positions")
 
     if failures:

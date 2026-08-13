@@ -109,8 +109,8 @@ capability gap there reads as a false question defect.
    question fails and gets rewritten.
 2. **Answerability gate** — a separate agent, _with_ the source, must pick the keyed
    answer, reconstruct the reasoning chain, and quote the source passage for each link.
-3. **Order audit** — hop count ≥3, answer term absent from the stem, every distractor a
-   true source fact, option length parity.
+3. **Order audit** — hop count ≥3, answer term absent from the stem, the stem answerable on
+   its own once the options are covered, every distractor a true source fact.
 
 Gates 1 and 2 must be different agents: one that has read the source cannot perform a
 credible blind pass. Gate 3 runs as a second turn in the gate-2 agent, which already has the
@@ -120,7 +120,10 @@ source loaded — two spawns per round, not three.
 full set, later rounds judge only the questions that failed, a clean round ends the loop, and
 each question is capped at 3 rewrite rounds. The free `check_mechanics.py` screen has to pass
 before any judge is spawned, and it re-checks the whole set — parity, absolutes, answer-position
-clustering — after every edit. Each run reports the spawns it used.
+clustering — after every edit. Those checks live only in the script: the judge prompts
+deliberately don't re-ask for them, since a judge re-deriving a threshold the script already
+enforced can only disagree with it, and every disagreement costs a rewrite round. Each run
+reports the spawns it used.
 
 One caveat the protocol is explicit about: a frontier model cannot fully suppress what it
 knows, so the blind judge will sometimes answer from domain knowledge and back-fill a

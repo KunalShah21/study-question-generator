@@ -120,14 +120,15 @@ credible blind pass. Gate 3 sharing gate 2's agent is fine — both are sourced 
 of this skill; a set that costs 24 spawns instead of 4 is not more validated, just slower and
 more expensive.
 
-- **Round 1 judges the full set.** Gate 1's set-wide hit-rate-vs-chance check needs every
-  question.
-- **Rounds 2+ judge only the questions that failed.** Never re-judge a question that passed.
-  Run `check_mechanics.py` on the whole set after every edit instead — it covers parity,
-  absolutes and answer-position clustering set-wide, for free.
-- **Stop as soon as a round comes back clean.** No confirmation round.
-- **Cap at 3 rewrite rounds per question.** At the cap, replace the concept or report the
-  question unresolved — never silently drop it.
+| Round | What gets judged | Cost |
+|---|---|---|
+| 1 | The full set — gate 1's set-wide hit-rate check needs it | 2 spawns (gate 1; gates 2+3 share one) |
+| 2+ | **Only the questions that failed.** Never re-judge one that passed | 2 spawns, tiny payload |
+| after every edit | `check_mechanics.py` on the **whole set** — parity, absolutes, clustering | free |
+| a round comes back clean | **stop.** No confirmation round | — |
+
+**Cap at 3 rewrite rounds per question** — count them out loud, per question. At the cap,
+replace the concept or report the question unresolved; never silently drop it.
 
 Pass `references/judge-protocol.md`'s prompts to the judge verbatim; they are self-contained,
 so tell each judge **not** to load this skill or its reference files.
@@ -173,18 +174,15 @@ requested vs N passing, blind hit rate vs chance, and anything unresolved.
 | Options span categories, use a synonym the source never uses, or mix one general capability with three specific acts | Redraw from one closed category, in the source's words, at one level of generality |
 | The correct option restates the stem in different words | Rewrite in the source's vocabulary — semantic echo is invisible to `check_mechanics.py` |
 | Stem paraphrases an abbreviation the source never expands (`HATs` → "add acetyl groups") | Use the source's own phrase; expanding it silently imports outside knowledge |
-| Chain is ≤2 hops, or the stem is still answerable with options covered | Extend the chain / rewrite the leaking options, or drop it |
+| Chain is ≤2 hops | Extend the chain, or drop the question |
+| With the options covered, a reader who knows the source can't produce the answer | The option list is carrying the question. Rewrite the stem to stand alone |
 | Hop count dropped after you fixed grounding | The removed synonym *was* the third hop — change concepts, don't restore it |
 | Third rewrite still fails | Replace the concept. Some option sets are permanently cued (five transcript parts = two pairs + one odd) |
 | Wrote the stem before the chain | Chain first, vignette backwards from it |
 | Source too thin for N | Cap N and say so; never pad with recall questions |
 | "Questions look good, skip the judge" | Run all three gates. Not optional |
-| Re-judging the whole set to fix one question | Round 1 is full-set; after that judge only the failures. Ten questions re-judged for one failure is the single biggest waste in this skill |
-| Another round after a clean one, "to confirm" | Stop. A clean round is the exit condition |
-| A question is on its 4th rewrite round | Cap is 3. Replace the concept or report it unresolved |
 | Rewriting a question because the blind judge named a cue, though its guess was wrong | That's a PASS. Rewriting it makes the question worse for nothing |
 | Judge spawned without being told to skip the skill | It will load generation rules it never uses. The gate prompts are self-contained |
-| Judge gates run before `check_mechanics.py` exits 0 | Free checks first. Never spend judge tokens on parity or clustering |
 | Judge inherits the session model, or one agent runs **gate 1 and gate 2** | Pass `model` explicitly. Gate 1 must be its own agent; gates 2 and 3 share one by design |
 | Failures quietly dropped so the set looks clean | Report pass rate and every failure |
 | Answer key states a chain with no citation | Cite the slide/page and quote the source per hop — Gate 2 produced those quotes already |
